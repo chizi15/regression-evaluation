@@ -166,6 +166,39 @@ y_noise_pred[1].plot(ax=ax5, legend=True)
 """
 
 
+def dyn_seri_weighted(seri, type=None, w=None, initial=1, r=2, d=1):
+    """
+    传入一维数组seri，可以是series,array,list,tuple；若不输入权重，则根据seri的长度动态计算基于几何级数或算数级数再作归一化的权重，再做算术平均；
+    也可人为输入权重做算术平均；若不输入type和w，则进行简单算数平均；因为使用np.dot，则seri索引越小，权重越大；将seri各点与权重相乘再相加，得到一个最终点。
+    :param seri: 需要进行加权变成一个点的一维数组
+    :param type: 采用几何级数或算数级数进行加权，或人为指定权重，或默认权重相等，type = 'geometric'或'arithmetic'或None
+    :param w: 一维的权重系数，可以是series,array,list,tuple；若手动输入，其长度必须和一维数组seri（即序列点数）相等
+    :param r: 指定几何级数分母的公比
+    :param d: 指定算数级数分母的公差
+    :param initial: 指定算数级数分母的初始值
+    :return: seri各点与权重w相乘再相加，返回的一个加权后的最终点
+    """
+    if type not in ['geometric', 'arithmetic', None]:
+        raise Exception('type must be one of geometric, arithmetic or None')
+    if type is not None:
+        w = list()
+        if type == 'geometric':
+            for i in range(len(seri)):
+                w.append(initial * (1 / r) ** i)  # 生成首项是initial，公比是(1/r)的几何级数作权重
+        else:
+            for i in range(len(seri)):
+                w.append(1 / (initial + d * i))  # 生成首项是initial，公差是d的算术级数，再做倒数作为权重
+        w = np.array(w) / sum(w)
+    elif (type is None) and (w is None):
+        w = np.ones(len(seri)) / sum(np.ones(len(seri)))  # 生成均等权重
+    elif (type is None) and (w is not None) and (len(w) == len(seri)):
+        w = np.array(w) / sum(w)  # 自定义权重
+    else:
+        raise Exception('手动输入的权重长度必须和一维数组长度（即序列点数）相等')
+    if abs(sum(w)-1) > 0.001:
+        raise Exception('weights are not useable')
+    return np.dot(np.array(seri), w)
+
 # y_true, y_pred无限制条件
 def emlae(y_true, y_pred):
     """
@@ -264,7 +297,8 @@ def regression_accuracy(y_true, y_pred):
             MSLE.append(metrics.mean_squared_log_error(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true≥0, y_pred≥0； this metric penalizes an under-predicted estimate greater than an over-predicted estimate because of logarithm
         else: continue
 
-    print('判断前的真实（及预测）序列条数:', len(y_true), '  判断后的真实（及预测）序列条数:', len(y_true_trun), '\n')
+    print('判断前的真实（及预测）序列对数:', len(y_true), '  判断后的真实（及预测）序列对数:', len(y_true_trun))
+    print('原始的评估指标：', '\n')
     print('第一组，零次的相对性指标：', '\n', 'MAPE:', MAPE, '\n', 'SMAPE:', SMAPE, '\n', 'RMSPE:', RMSPE, '\n', 'MTD_p2:', MTD_p2, '\n')
     print('第二组，一次的绝对性指标：', '\n', 'EMLAE:', EMLAE, '\n', 'MALE:', MALE, '\n', 'MAE:', MAE, '\n', 'RMSE:', RMSE, '\n', 'MedAE:', MedAE, '\n', 'MTD_p1:', MTD_p1, '\n')
     print('第三组，二次的绝对性指标：', '\n', 'MSE:', MSE, '\n', 'MSLE:', MSLE, '\n')
@@ -286,12 +320,17 @@ def regression_accuracy(y_true, y_pred):
     MSE_1 = np.array(MSE) / sum(np.array(MSE))
     MSLE_1 = np.array(MSLE) / sum(np.array(MSLE))
 
+    print('数值变换后的评估指标：', '\n')
+    print('第一组，零次的相对性指标：', '\n', 'MAPE:', MAPE_1, '\n', 'SMAPE:', SMAPE_1, '\n', 'RMSPE:', RMSPE_1, '\n', 'MTD_p2:', MTD_p2_1, '\n')
+    print('第二组，一次的绝对性指标：', '\n', 'EMLAE:', EMLAE_1, '\n', 'MALE:', MALE_1, '\n', 'MAE:', MAE_1, '\n', 'RMSE:', RMSE_1, '\n', 'MedAE:', MedAE_1, '\n', 'MTD_p1:', MTD_p1_1, '\n')
+    print('第三组，二次的绝对性指标：', '\n', 'MSE:', MSE_1, '\n', 'MSLE:', MSLE_1, '\n')
+
     # 用简单调和平均计算各序列对经归一化后的各个精度指标，形成各序列对的最终单一精度指标；调和平均受输入样本点离群值的影响最小，相比于其他平均值而言；
     precision = []
     for i in range(len(y_true_trun)):
-        precision.append(stats.hmean([MAPE_1[i], MAPE_1[i], MAPE_1[i], SMAPE_1[i], SMAPE_1[i], RMSPE_1[i], RMSPE_1[i], MTD_p2_1[i],
-                                      EMLAE_1[i], MALE_1[i], MAE_1[i], RMSE_1[i], RMSE_1[i], RMSE_1[i], MedAE_1[i], MTD_p1_1[i],
-                                      MSE_1[i], MSLE_1[i]]))
+        precision.append(dyn_seri_weighted([MAPE_1[i], SMAPE_1[i], RMSPE_1[i], MTD_p2_1[i],
+                                      EMLAE_1[i], MALE_1[i], MAE_1[i], RMSE_1[i], MedAE_1[i], MTD_p1_1[i],
+                                      MSE_1[i], MSLE_1[i]], w=[3,2,2,1, 1,1,1,3,1,1, 1,1]))
     print('各序列对的最终精度：', '\n', np.array(precision), '\n')
 
     return precision, MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MALE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE  # 注意返回的各分量精度指标是未归一化前的数值，而最终precision是由各分量精度指标归一化后的数值算出的
@@ -349,35 +388,42 @@ def regression_evaluation(y_true, y_pred):
             MSLE.append(metrics.mean_squared_log_error(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true≥0, y_pred≥0； this metric penalizes an under-predicted estimate greater than an over-predicted estimate because of logarithm
         else: continue
 
-    print('判断前的真实（及预测）序列条数:', len(y_true), '  判断后的真实（及预测）序列条数:', len(y_true_trun), '\n')
+    print('判断前的真实（及预测）序列对数:', len(y_true), '  判断后的真实（及预测）序列对数:', len(y_true_trun))
+    print('原始的评估指标：', '\n')
     print('第一组，零次的相对性指标：', '\n', 'MAPE:', MAPE, '\n', 'SMAPE:', SMAPE, '\n', 'RMSPE:', RMSPE, '\n', 'MTD_p2:', MTD_p2, '\n', 'VAR:', VAR, '\n')
     print('第二组，一次的绝对性指标：', '\n', 'EMLAE:', EMLAE, '\n', 'MALE:', MALE, '\n', 'MAE:', MAE, '\n', 'RMSE:', RMSE, '\n', 'MedAE:', MedAE, '\n', 'MTD_p1:', MTD_p1, '\n')
     print('第三组，二次的绝对性指标：', '\n', 'MSE:', MSE, '\n', 'MSLE:', MSLE, '\n')
 
     # 将各序列对的若干精度指标整合成各序列对的最终单一评价指标；序列对的数目必须≥2，否则归一化不能起到抹平不同指标不同数量级的作用；
     # 将各精度指标按序列对的维度进行归一化
-    MAPE_1 = np.array(MAPE) / sum(np.array(MAPE))
-    SMAPE_1 = np.array(SMAPE) / sum(np.array(SMAPE))
-    RMSPE_1 = np.array(RMSPE) / sum(np.array(RMSPE))
-    MTD_p2_1 = np.array(MTD_p2) / sum(np.array(MTD_p2))
+    MAPE_1 = np.sqrt(MAPE / np.mean(MAPE)) / sum(np.sqrt(MAPE / np.mean(MAPE)))
+    SMAPE_1 = np.sqrt(SMAPE / np.mean(SMAPE)) / sum(np.sqrt(SMAPE / np.mean(SMAPE)))
+    RMSPE_1 = np.sqrt(RMSPE / np.mean(RMSPE)) / sum(np.sqrt(RMSPE / np.mean(RMSPE)))
+    MTD_p2_1 = np.sqrt(MTD_p2 / np.mean(MTD_p2)) / sum(np.sqrt(MTD_p2 / np.mean(MTD_p2)))
     VAR_1 = (-np.array(VAR)+1 + np.mean(-np.array(VAR)+1)) / sum(-np.array(VAR)+1 + np.mean(-np.array(VAR)+1))  # 因为VAR的取值范围是(-∞, 1]，越趋近1越好，是极大化目标函数，与其他指标相反；所以需要对其做数值变换，使其变为极小化目标函数，并加上np.mean，使其更适合作归一化。
+    VAR_1 = np.sqrt(VAR_1 / np.mean(VAR_1)) / sum(np.sqrt(VAR_1 / np.mean(VAR_1)))
 
-    EMLAE_1 = np.array(EMLAE) / sum(np.array(EMLAE))
-    MALE_1 = np.array(MALE) / sum(np.array(MALE))
-    MAE_1 = np.array(MAE) / sum(np.array(MAE))
-    RMSE_1 = np.array(RMSE) / sum(np.array(RMSE))
-    MedAE_1 = np.array(MedAE) / sum(np.array(MedAE))
-    MTD_p1_1 = np.array(MTD_p1) / sum(np.array(MTD_p1))
+    EMLAE_1 = np.sqrt(EMLAE / np.mean(EMLAE)) / sum(np.sqrt(EMLAE / np.mean(EMLAE)))
+    MALE_1 = np.sqrt(MALE / np.mean(MALE)) / sum(np.sqrt(MALE / np.mean(MALE)))
+    MAE_1 = np.sqrt(MAE / np.mean(MAE)) / sum(np.sqrt(MAE / np.mean(MAE)))
+    RMSE_1 = np.sqrt(RMSE / np.mean(RMSE)) / sum(np.sqrt(RMSE / np.mean(RMSE)))
+    MedAE_1 = np.sqrt(MedAE / np.mean(MedAE)) / sum(np.sqrt(MedAE / np.mean(MedAE)))
+    MTD_p1_1 = np.sqrt(MTD_p1 / np.mean(MTD_p1)) / sum(np.sqrt(MTD_p1 / np.mean(MTD_p1)))
 
-    MSE_1 = np.array(MSE) / sum(np.array(MSE))
-    MSLE_1 = np.array(MSLE) / sum(np.array(MSLE))
+    MSE_1 = np.sqrt(MSE / np.mean(MSE)) / sum(np.sqrt(MSE / np.mean(MSE)))
+    MSLE_1 = np.sqrt(MSLE / np.mean(MSLE)) / sum(np.sqrt(MSLE / np.mean(MSLE)))
+
+    print('数值变换后的评估指标：', '\n')
+    print('第一组，零次的相对性指标：', '\n', 'MAPE:', MAPE_1, '\n', 'SMAPE:', SMAPE_1, '\n', 'RMSPE:', RMSPE_1, '\n', 'MTD_p2:', MTD_p2_1, '\n', 'VAR:', VAR_1, '\n')
+    print('第二组，一次的绝对性指标：', '\n', 'EMLAE:', EMLAE_1, '\n', 'MALE:', MALE_1, '\n', 'MAE:', MAE_1, '\n', 'RMSE:', RMSE_1, '\n', 'MedAE:', MedAE_1, '\n', 'MTD_p1:', MTD_p1_1, '\n')
+    print('第三组，二次的绝对性指标：', '\n', 'MSE:', MSE_1, '\n', 'MSLE:', MSLE_1, '\n')
 
     # 用简单调和平均计算各序列对经归一化后的各个精度指标，形成各序列对的最终单一精度指标；调和平均受输入样本点离群值的影响最小，相比于其他平均值而言；
     precision = []
     for i in range(len(y_true_trun)):
-        precision.append(stats.hmean([MAPE_1[i], MAPE_1[i], MAPE_1[i], SMAPE_1[i], SMAPE_1[i], RMSPE_1[i], RMSPE_1[i], MTD_p2_1[i], VAR_1[i],
-                                      EMLAE_1[i], MALE_1[i], MAE_1[i], RMSE_1[i], RMSE_1[i], RMSE_1[i], MedAE_1[i], MTD_p1_1[i],
-                                      MSE_1[i], MSLE_1[i]]))
+        precision.append(dyn_seri_weighted([MAPE_1[i], SMAPE_1[i], RMSPE_1[i], MTD_p2_1[i], VAR_1[i],
+                                      EMLAE_1[i], MALE_1[i], MAE_1[i], RMSE_1[i], MedAE_1[i], MTD_p1_1[i],
+                                      MSE_1[i], MSLE_1[i]], w=[3,2,2,1,1, 1,1,1,3,1,1, 1,1]))
     print('各序列对的最终精度：', '\n', np.array(precision), '\n')
 
     return precision, MAPE, SMAPE, RMSPE, MTD_p2, VAR, EMLAE, MALE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE  # 注意返回的各分量精度指标是未归一化前的数值，而最终precision是由各分量精度指标归一化后的数值算出的
