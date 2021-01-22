@@ -15,7 +15,7 @@ plt.rc('font', size=10)
 # ###########---------------set up and plot input data-----------------######################
 base_value = 10  # 设置level、trend、season项的基数
 steps_day, steps_week = 1, 1
-length = [steps_day*5+steps_day, steps_week*5+steps_week]  # 代表每个序列的长度，分别为周、日序列的一年及两年
+length = [steps_day*6+steps_day, steps_week*6+steps_week]  # 代表周、日序列对的长度
 
 weights = []
 for i in range(-base_value + 1, 1):
@@ -23,7 +23,7 @@ for i in range(-base_value + 1, 1):
 weights = np.array(weights)
 
 
-# #########################################################--构造乘法周期性时间序列，模拟真实销售
+# #########################################################--构造乘法周期性时间序列，模拟真实销售；外层是list，内层的每一条序列是series
 y_level_actual, y_trend_actual, y_season_actual, y_noise_actual, y_input_mul_actual = [[]] * len(length), [[]] * len(length), [[]] * len(length), [[]] * len(length), [[]] * len(length)
 for i in range(0, len(length)):
     y_season_actual[i] = np.sqrt(base_value) * np.sin(np.linspace(np.pi / 2, 10 * np.pi, length[i]))  # 用正弦函数模拟周期性
@@ -46,45 +46,11 @@ for i in range(0, len(length)):
     y_season_actual[i] = pd.Series(y_season_actual[i]).rename('y_season_actual')
     y_noise_actual[i] = pd.Series(y_noise_actual[i]).rename('y_noise_actual')
     y_input_mul_actual[i] = pd.Series(y_input_mul_actual[i]).rename('y_input_mul_actual')
-    # print(y_input_mul_actual[i], '\n')
+    # y_input_mul_actual[i][y_input_mul_actual[i] < 0.011] = 0.011  # 将series中小于0.011的数置为0.011；因为后续regression_accuracy，regression_evaluation会将series中小于0的置为0.01，若此处不将小于0.011的置为0.011，则画出的图可能与后续两个综合评估函数中所使用的序列不一致。
+    print('第{0}条真实序列的初始生成值：'.format(i))
+    print(y_input_mul_actual[i], '\n')
 
-# 绘制四条乘法季节性时间序列；xlim让每条折线图填充满x坐标轴
-plt.figure('mul_actual_pred: day', figsize=(5,10))
-ax1 = plt.subplot(5,1,1)
-xlim = plt.gca().set_xlim(0, length[0]-1)
-ax2 = plt.subplot(5,1,2)
-xlim = plt.gca().set_xlim(0, length[0]-1)
-ax3 = plt.subplot(5,1,3)
-xlim = plt.gca().set_xlim(0, length[0]-1)
-ax4 = plt.subplot(5,1,4)
-xlim = plt.gca().set_xlim(0, length[0]-1)
-ax5 = plt.subplot(5,1,5)
-xlim = plt.gca().set_xlim(0, length[0]-1)
-y_input_mul_actual[0].plot(ax=ax1, legend=True)
-y_level_actual[0].plot(ax=ax2, legend=True)
-y_trend_actual[0].plot(ax=ax3, legend=True)
-y_season_actual[0].plot(ax=ax4, legend=True)
-y_noise_actual[0].plot(ax=ax5, legend=True)
-
-plt.figure('mul_actual_pred: week', figsize=(5,10))
-ax1 = plt.subplot(5,1,1)
-xlim = plt.gca().set_xlim(0, length[1]-1)
-ax2 = plt.subplot(5,1,2)
-xlim = plt.gca().set_xlim(0, length[1]-1)
-ax3 = plt.subplot(5,1,3)
-xlim = plt.gca().set_xlim(0, length[1]-1)
-ax4 = plt.subplot(5,1,4)
-xlim = plt.gca().set_xlim(0, length[1]-1)
-ax5 = plt.subplot(5,1,5)
-xlim = plt.gca().set_xlim(0, length[1]-1)
-y_input_mul_actual[1].plot(ax=ax1, legend=True)
-y_level_actual[1].plot(ax=ax2, legend=True)
-y_trend_actual[1].plot(ax=ax3, legend=True)
-y_season_actual[1].plot(ax=ax4, legend=True)
-y_noise_actual[1].plot(ax=ax5, legend=True)
-
-
-##########################################################--构造乘法周期性时间序列，模拟预测销售
+##########################################################--构造乘法周期性时间序列，模拟预测销售；外层是list，内层的每一条序列是series
 y_level_pred, y_trend_pred, y_season_pred, y_noise_pred, y_input_mul_pred = [[]] * len(length), [[]] * len(length), [[]] * len(length), [[]] * len(length), [[]] * len(length)
 for i in range(0, len(length)):
     y_season_pred[i] = 1/2 * np.sqrt(base_value) * np.sin(np.linspace(np.pi / 2, 10 * np.pi, length[i]))  # 用正弦函数模拟周期性，使预测销售的波动振幅比真实销售小
@@ -107,42 +73,28 @@ for i in range(0, len(length)):
     y_season_pred[i] = pd.Series(y_season_pred[i]).rename('y_season_pred')
     y_noise_pred[i] = pd.Series(y_noise_pred[i]).rename('y_noise_pred')
     y_input_mul_pred[i] = pd.Series(y_input_mul_pred[i]).rename('y_input_mul_pred')
-    # print(y_input_mul_pred[i], '\n')
+    # y_input_mul_pred[i][y_input_mul_pred[i] < 0.011] = 0.011  # 将series中小于0.011的数置为0.011；因为后续regression_accuracy，regression_evaluation会将series中小于0的置为0.01，若此处不将小于0.011的置为0.011，则画出的图可能与后续两个综合评估函数中所使用的序列不一致。
+    print('第{0}条预测序列的初始生成值：'.format(i))
+    print(y_input_mul_pred[i], '\n')
 
-# 绘制四条乘法季节性时间序列；xlim让每条折线图填充满x坐标轴
-plt.figure('mul_actual_pred: day', figsize=(5,10))
-ax1 = plt.subplot(5,1,1)
-xlim = plt.gca().set_xlim(0, length[0]-1)
-ax2 = plt.subplot(5,1,2)
-xlim = plt.gca().set_xlim(0, length[0]-1)
-ax3 = plt.subplot(5,1,3)
-xlim = plt.gca().set_xlim(0, length[0]-1)
-ax4 = plt.subplot(5,1,4)
-xlim = plt.gca().set_xlim(0, length[0]-1)
-ax5 = plt.subplot(5,1,5)
-xlim = plt.gca().set_xlim(0, length[0]-1)
-y_input_mul_pred[0].plot(ax=ax1, legend=True)
-y_level_pred[0].plot(ax=ax2, legend=True)
-y_trend_pred[0].plot(ax=ax3, legend=True)
-y_season_pred[0].plot(ax=ax4, legend=True)
-y_noise_pred[0].plot(ax=ax5, legend=True)
-
-plt.figure('mul_actual_pred: week', figsize=(5,10))
-ax1 = plt.subplot(5,1,1)
-xlim = plt.gca().set_xlim(0, length[1]-1)
-ax2 = plt.subplot(5,1,2)
-xlim = plt.gca().set_xlim(0, length[1]-1)
-ax3 = plt.subplot(5,1,3)
-xlim = plt.gca().set_xlim(0, length[1]-1)
-ax4 = plt.subplot(5,1,4)
-xlim = plt.gca().set_xlim(0, length[1]-1)
-ax5 = plt.subplot(5,1,5)
-xlim = plt.gca().set_xlim(0, length[1]-1)
-y_input_mul_pred[1].plot(ax=ax1, legend=True)
-y_level_pred[1].plot(ax=ax2, legend=True)
-y_trend_pred[1].plot(ax=ax3, legend=True)
-y_season_pred[1].plot(ax=ax4, legend=True)
-y_noise_pred[1].plot(ax=ax5, legend=True)
+for i in range(len(y_input_mul_actual)):
+    # 绘制真实值和对应的预测值序列
+    plt.figure('initial {0}'.format(i), figsize=(5,10))
+    ax1 = plt.subplot(5,1,1)
+    ax2 = plt.subplot(5,1,2)
+    ax3 = plt.subplot(5,1,3)
+    ax4 = plt.subplot(5,1,4)
+    ax5 = plt.subplot(5,1,5)
+    y_input_mul_actual[i].plot(ax=ax1, legend=True)
+    y_level_actual[i].plot(ax=ax2, legend=True)
+    y_trend_actual[i].plot(ax=ax3, legend=True)
+    y_season_actual[i].plot(ax=ax4, legend=True)
+    y_noise_actual[i].plot(ax=ax5, legend=True)
+    y_input_mul_pred[i].plot(ax=ax1, legend=True)
+    y_level_pred[i].plot(ax=ax2, legend=True)
+    y_trend_pred[i].plot(ax=ax3, legend=True)
+    y_season_pred[i].plot(ax=ax4, legend=True)
+    y_noise_pred[i].plot(ax=ax5, legend=True)
 
 
 """
@@ -239,6 +191,7 @@ def smape(y_true, y_pred):
     smape = sum(abs(2 * (y_pred - y_true) / (y_pred + y_true))) / n
     return smape
 
+# y_true, y_pred无限制条件
 def male(y_true, y_pred):
     """
     param：
@@ -266,82 +219,87 @@ def regression_accuracy(y_true, y_pred):
     3.ln(1/x)+len(x)=0，即对一个数（如x）取对数，与其倒数（1/x）取对数，互为相反数；当x>0，ln(1/x)+x-1≥0，lnx+(1/x)-1≥0，可由求导证明；在(0,4]的区间内，lnx的增长速度快于x**(1/2)，在[4,+∞)区间内，lnx的增长速度慢于x**(1/2)，可由求导证明。
     """
 
-    if (len(y_true) != len(y_pred)) or (len(y_true) < 2):
-        raise Exception('y_true与y_pred中序列条数必须相等且≥2')
-
     MAPE, SMAPE, RMSPE, MTD_p2 = [], [], [], []  # 零次的相对性指标
     EMLAE, MALE, MAE, RMSE, MedAE, MTD_p1 = [], [], [], [], [], []  # 一次的绝对性指标
     MSE, MSLE = [], []  # 二次的绝对性指标
 
     y_true_trun, y_pred_trun = [], []
     for i in range(len(y_true)):
-        # 为了统一下列12个精度指标的条件，在y_true和y_pred的对应序列中，取大于0的对应点，即排除≤0的对应点；但不应取>0，可以取>0.01，否则若序列中存在大于0但非常接近0的数做分母，可能产生很大的值，不利于得到有效的精度值
+        # 为了统一下列12个精度指标的条件，在y_true和y_pred的序列对中，取大于0的对应点，即排除≤0的对应点；但不应取>0，可以取>0.01，否则若序列中存在大于0但非常接近0的数做分母，可能产生很大的值，不利于得到有效可用的精度值
         judge = (y_true[i] > 0.01) & (y_pred[i] > 0.01)
         if sum(judge):
             y_true_trun.append(y_true[i][judge])
             y_pred_trun.append(y_pred[i][judge])
-            # 第一组，零次的相对性指标：
-            MAPE.append(mape(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true != 0; no bias
-            SMAPE.append(smape(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true + y_pred != 0; symmetric MAPE, no bias and more general, less susceptible to outliers than MAPE.
-            RMSPE.append(eval_measures.rmspe(np.array(y_true_trun[i]), np.array(y_pred_trun[i])) / 10)  # y_true != 0; susceptible to outliers of deviation ratio, if more, RMSPE will be larger than MAPE.
-            MTD_p2.append(metrics.mean_tweedie_deviance(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i]), power=2)) # y_pred > 0, y_true > 0; less susceptible to outliers than MAPE when y_pred[i] / y_true[i] > 1, nevertheless, more susceptible to outliers than MAPE when y_pred[i] / y_true[i] < 1
-            # 第二组，一次的绝对性指标：
-            EMLAE.append(emlae(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件; less susceptible to outliers of error than MAE, so this will penalize small deviation and award large deviation relative to MAE.
-            MALE.append(male(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件;
-            MAE.append(metrics.mean_absolute_error(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件； this metric has no penalty, no bias
-            RMSE.append(eval_measures.rmse(np.array(y_true_trun[i]), np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件；susceptible to outliers of error than MAE, so this will penalize large deviation and award small deviation relative to MAE.
-            MedAE.append(metrics.median_absolute_error(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件； if len(y) is slightly large; won't be affected by outliers completely
-            MTD_p1.append(metrics.mean_tweedie_deviance(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i]), power=1))  # y_pred > 0, y_true ≥ 0; The higher `p` the less weight is given to extreme deviations between true and predicted targets.
-            # 第三组，二次的绝对性指标：
-            MSE.append(metrics.mean_squared_error(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件； this metric penalizes a large residual greater than a small residual because of square
-            MSLE.append(metrics.mean_squared_log_error(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true≥0, y_pred≥0； this metric penalizes an under-predicted estimate greater than an over-predicted estimate because of logarithm
         else: continue
 
-    print('判断前的真实（及预测）序列对数:', len(y_true), '  判断后的真实（及预测）序列对数:', len(y_true_trun))
-    print('原始的评估指标：', '\n')
-    print('第一组，零次的相对性指标：', '\n', 'MAPE:', MAPE, '\n', 'SMAPE:', SMAPE, '\n', 'RMSPE:', RMSPE, '\n', 'MTD_p2:', MTD_p2, '\n')
-    print('第二组，一次的绝对性指标：', '\n', 'EMLAE:', EMLAE, '\n', 'MALE:', MALE, '\n', 'MAE:', MAE, '\n', 'RMSE:', RMSE, '\n', 'MedAE:', MedAE, '\n', 'MTD_p1:', MTD_p1, '\n')
+    if (len(y_true_trun) != len(y_pred_trun)) or (len(y_true_trun) < 2):
+        raise Exception('y_true_trun与y_pred_trun中序列条数必须相等且≥2')  # 若序列对的数目小于2，则数值变换后的指标均为1
+
+    plt.figure('finall input')
+    for i in range(len(y_true_trun)):
+        ax = plt.subplot(len(y_true_trun), 1, i+1)
+        xlim = plt.gca().set_xlim(0, length[i]-1)  # xlim使图形按x轴上的点数充满横坐标
+        y_true_trun[i].plot(ax=ax, legend=True)
+        y_pred_trun[i].plot(ax=ax, legend=True)
+        print('第{0}组实际输入的序列对：'.format(i))
+        print(y_true_trun[i], '\n', y_pred_trun[i], '\n')
+
+    for i in range(len(y_true_trun)):
+        # 第一组，零次的相对性指标：
+        MAPE.append(mape(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true != 0; no bias
+        SMAPE.append(smape(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true + y_pred != 0; symmetric MAPE, no bias and more general, less susceptible to outliers than MAPE.
+        RMSPE.append(eval_measures.rmspe(np.array(y_true_trun[i]), np.array(y_pred_trun[i])) / 10)  # y_true != 0; susceptible to outliers of deviation ratio, if more, RMSPE will be larger than MAPE.
+        MTD_p2.append(metrics.mean_tweedie_deviance(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i]), power=2)) # y_pred > 0, y_true > 0; less susceptible to outliers than MAPE when y_pred[i] / y_true[i] > 1, nevertheless, more susceptible to outliers than MAPE when y_pred[i] / y_true[i] < 1
+        # 第二组，一次的绝对性指标：
+        EMLAE.append(emlae(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件; less susceptible to outliers of error than MAE, so this will penalize small deviation and award large deviation relative to MAE.
+        MALE.append(male(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件;
+        MAE.append(metrics.mean_absolute_error(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件； this metric has no penalty, no bias
+        RMSE.append(eval_measures.rmse(np.array(y_true_trun[i]), np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件；susceptible to outliers of error than MAE, so this will penalize large deviation and award small deviation relative to MAE.
+        MedAE.append(metrics.median_absolute_error(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件； if len(y) is slightly large; won't be affected by outliers completely
+        MTD_p1.append(metrics.mean_tweedie_deviance(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i]), power=1))  # y_pred > 0, y_true ≥ 0; The higher `p` the less weight is given to extreme deviations between true and predicted targets.
+        # 第三组，二次的绝对性指标：
+        MSE.append(metrics.mean_squared_error(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件； this metric penalizes a large residual greater than a small residual because of square
+        MSLE.append(metrics.mean_squared_log_error(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true≥0, y_pred≥0； this metric penalizes an under-predicted estimate greater than an over-predicted estimate because of logarithm
+
+    print('判断前的真实（及预测）序列对数:', len(y_true), '  判断后的真实（及预测）序列对数:', len(y_true_trun), '\n')
+    print('原始的评估指标：')
+    print('第一组，零次的相对性指标：', '\n', 'MAPE:', MAPE, '\n', 'SMAPE:', SMAPE, '\n', 'RMSPE:', RMSPE, '\n', 'MTD_p2:', MTD_p2)
+    print('第二组，一次的绝对性指标：', '\n', 'EMLAE:', EMLAE, '\n', 'MALE:', MALE, '\n', 'MAE:', MAE, '\n', 'RMSE:', RMSE, '\n', 'MedAE:', MedAE, '\n', 'MTD_p1:', MTD_p1)
     print('第三组，二次的绝对性指标：', '\n', 'MSE:', MSE, '\n', 'MSLE:', MSLE, '\n')
 
-    # 将各序列对的若干精度指标整合成各序列对的最终单一评价指标；序列对的数目必须≥2，否则归一化不能起到抹平不同指标不同数量级的作用；
-    # 将各精度指标按序列对的维度进行归一化
-    MAPE_1 = np.array(MAPE) / sum(np.array(MAPE))
-    SMAPE_1 = np.array(SMAPE) / sum(np.array(SMAPE))
-    RMSPE_1 = np.array(RMSPE) / sum(np.array(RMSPE))
-    MTD_p2_1 = np.array(MTD_p2) / sum(np.array(MTD_p2))
+    # 将各序列对的若干精度指标整合成各序列对的最终单一评价指标；序列对的数目必须≥2，否则归一化后各指标值均为1。
+    # 将各精度指标在各自维度内进行数值变换：1.对各指标除以其均值，将任意数量级的指标转化为在1上下波动的数值。
+    # 2.再对抹平数量级后的指标作开方，进一步缩小指标内数值的差距，保留代表优劣的方向性即可；原始指标内数值差异越大，所开次方根数越大，反之越小，可以避免指标间离群值的出现。
+    # 3.再对list作归一化，将所有结果都转化为(0,1)之间的数，越趋近0越好，代表预测列越趋近真实序列；最终精度presion经过有偏向的加权后，也是(0,1)之间的数值。
+    MAPE_1 = (MAPE / np.mean(MAPE)) / sum(MAPE / np.mean(MAPE))
+    SMAPE_1 = (SMAPE / np.mean(SMAPE)) / sum(SMAPE / np.mean(SMAPE))
+    RMSPE_1 = (RMSPE / np.mean(RMSPE)) / sum(RMSPE / np.mean(RMSPE))
+    MTD_p2_1 = np.sqrt(MTD_p2 / np.mean(MTD_p2)) / sum(np.sqrt(MTD_p2 / np.mean(MTD_p2)))
 
-    EMLAE_1 = np.array(EMLAE) / sum(np.array(EMLAE))
-    MALE_1 = np.array(MALE) / sum(np.array(MALE))
-    MAE_1 = np.array(MAE) / sum(np.array(MAE))
-    RMSE_1 = np.array(RMSE) / sum(np.array(RMSE))
-    MedAE_1 = np.array(MedAE) / sum(np.array(MedAE))
-    MTD_p1_1 = np.array(MTD_p1) / sum(np.array(MTD_p1))
+    EMLAE_1 = np.sqrt(EMLAE / np.mean(EMLAE)) / sum(np.sqrt(EMLAE / np.mean(EMLAE)))
+    MALE_1 = (MALE / np.mean(MALE)) / sum(MALE / np.mean(MALE))
+    MAE_1 = np.sqrt(MAE / np.mean(MAE)) / sum(np.sqrt(MAE / np.mean(MAE)))
+    RMSE_1 = np.sqrt(RMSE / np.mean(RMSE)) / sum(np.sqrt(RMSE / np.mean(RMSE)))
+    MedAE_1 = np.sqrt(MedAE / np.mean(MedAE)) / sum(np.sqrt(MedAE / np.mean(MedAE)))
+    MTD_p1_1 = np.sqrt(MTD_p1 / np.mean(MTD_p1)) / sum(np.sqrt(MTD_p1 / np.mean(MTD_p1)))
 
-    MSE_1 = np.array(MSE) / sum(np.array(MSE))
-    MSLE_1 = np.array(MSLE) / sum(np.array(MSLE))
+    MSE_1 = (MSE / np.mean(MSE))**(1/4) / sum((MSE / np.mean(MSE))**(1/4))
+    MSLE_1 = np.sqrt(MSLE / np.mean(MSLE)) / sum(np.sqrt(MSLE / np.mean(MSLE)))
 
-    print('数值变换后的评估指标：', '\n')
-    print('第一组，零次的相对性指标：', '\n', 'MAPE:', MAPE_1, '\n', 'SMAPE:', SMAPE_1, '\n', 'RMSPE:', RMSPE_1, '\n', 'MTD_p2:', MTD_p2_1, '\n')
-    print('第二组，一次的绝对性指标：', '\n', 'EMLAE:', EMLAE_1, '\n', 'MALE:', MALE_1, '\n', 'MAE:', MAE_1, '\n', 'RMSE:', RMSE_1, '\n', 'MedAE:', MedAE_1, '\n', 'MTD_p1:', MTD_p1_1, '\n')
+    print('数值变换后的评估指标：')
+    print('第一组，零次的相对性指标：', '\n', 'MAPE:', MAPE_1, '\n', 'SMAPE:', SMAPE_1, '\n', 'RMSPE:', RMSPE_1, '\n', 'MTD_p2:', MTD_p2_1)
+    print('第二组，一次的绝对性指标：', '\n', 'EMLAE:', EMLAE_1, '\n', 'MALE:', MALE_1, '\n', 'MAE:', MAE_1, '\n', 'RMSE:', RMSE_1, '\n', 'MedAE:', MedAE_1, '\n', 'MTD_p1:', MTD_p1_1)
     print('第三组，二次的绝对性指标：', '\n', 'MSE:', MSE_1, '\n', 'MSLE:', MSLE_1, '\n')
 
-    # 用简单调和平均计算各序列对经归一化后的各个精度指标，形成各序列对的最终单一精度指标；调和平均受输入样本点离群值的影响最小，相比于其他平均值而言；
     precision = []
     for i in range(len(y_true_trun)):
+        # 不用调和平均、几何平均，避免结果向极小值趋近；不用均方根，避免结果向极大值趋近；使用算术平均加权，权重可根据实际需求手动调整。
         precision.append(dyn_seri_weighted([MAPE_1[i], SMAPE_1[i], RMSPE_1[i], MTD_p2_1[i],
                                       EMLAE_1[i], MALE_1[i], MAE_1[i], RMSE_1[i], MedAE_1[i], MTD_p1_1[i],
                                       MSE_1[i], MSLE_1[i]], w=[3,2,2,1, 1,1,1,3,1,1, 1,1]))
     print('各序列对的最终精度：', '\n', np.array(precision), '\n')
 
     return precision, MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MALE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE  # 注意返回的各分量精度指标是未归一化前的数值，而最终precision是由各分量精度指标归一化后的数值算出的
-
-results = regression_accuracy(y_true=y_input_mul_actual, y_pred=y_input_mul_pred)
-results = pd.DataFrame(results, columns=['couple one', 'couple two'], index=['precision',
-                                                                   'MAPE', 'SMAPE', 'RMSPE', 'MTD_p2',
-                                                                   'EMLAE', 'MALE', 'MAE', 'RMSE', 'MedAE', 'MTD_p1',
-                                                                   'MSE', 'MSLE'])
-print('指标数：', len(results))
-print(results, '\n')
 
 
 def regression_evaluation(y_true, y_pred):
@@ -356,71 +314,84 @@ def regression_evaluation(y_true, y_pred):
     3.ln(1/x)+len(x)=0，即对一个数（如x）取对数，与其倒数（1/x）取对数，互为相反数；当x>0，ln(1/x)+x-1≥0，lnx+(1/x)-1≥0，可由求导证明；在(0,4]的区间内，lnx的增长速度快于x**(1/2)，在[4,+∞)区间内，lnx的增长速度慢于x**(1/2)，可由求导证明。
     """
 
-    if (len(y_true) != len(y_pred)) or (len(y_true) < 2):
-        raise Exception('y_true与y_pred中序列条数必须相等且≥2')
-
     MAPE, SMAPE, RMSPE, MTD_p2, VAR = [], [], [], [], []  # 零次的相对性指标
     EMLAE, MALE, MAE, RMSE, MedAE, MTD_p1 = [], [], [], [], [], []  # 一次的绝对性指标
     MSE, MSLE = [], []  # 二次的绝对性指标
 
     y_true_trun, y_pred_trun = [], []
     for i in range(len(y_true)):
-        # 为了统一下列12个精度指标的条件，在y_true和y_pred的对应序列中，取大于0的对应点，即排除≤0的对应点；但不应取>0，可以取>0.01，否则若序列中存在大于0但非常接近0的数做分母，可能产生很大的值，不利于得到有效的精度值
+        # 为了统一下列精度指标的条件，在y_true和y_pred的序列对中，取大于0的对应点，即排除≤0的对应点；但不应取>0，可以取>0.01，否则若序列中存在大于0但非常接近0的数做分母，可能产生很大的值，不利于得到有效可用的精度值
         judge = (y_true[i] > 0.01) & (y_pred[i] > 0.01)
         if sum(judge):
             y_true_trun.append(y_true[i][judge])
             y_pred_trun.append(y_pred[i][judge])
-            # 第一组，零次的相对性指标：
-            MAPE.append(mape(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true != 0; no bias
-            SMAPE.append(smape(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true + y_pred != 0; symmetric MAPE, no bias and more general, less susceptible to outliers than MAPE.
-            RMSPE.append(eval_measures.rmspe(np.array(y_true_trun[i]), np.array(y_pred_trun[i])) / 10)  # y_true != 0; susceptible to outliers of deviation ratio, if more, RMSPE will be larger than MAPE.
-            MTD_p2.append(metrics.mean_tweedie_deviance(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i]), power=2)) # y_pred > 0, y_true > 0; less susceptible to outliers than MAPE when y_pred[i] / y_true[i] > 1, nevertheless, more susceptible to outliers than MAPE when y_pred[i] / y_true[i] < 1
-            VAR.append(metrics.explained_variance_score(y_true=y_true_trun[i], y_pred=y_pred_trun[i]))  # y_true, y_pred无限制条件；但explained_variance_score为极大化目标函数，值域为(-∞, 1]，越趋近1越好；与其余的极小化目标函数相反，它们的因变量是越小越好。
-            # 第二组，一次的绝对性指标：
-            EMLAE.append(emlae(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件; less susceptible to outliers of error than MAE, so this will penalize small deviation and award large deviation relative to MAE.
-            MALE.append(male(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件;
-            MAE.append(metrics.mean_absolute_error(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件； this metric has no penalty, no bias
-            RMSE.append(eval_measures.rmse(np.array(y_true_trun[i]), np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件；susceptible to outliers of error than MAE, so this will penalize large deviation and award small deviation relative to MAE.
-            MedAE.append(metrics.median_absolute_error(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件； if len(y) is slightly large; won't be affected by outliers completely
-            MTD_p1.append(metrics.mean_tweedie_deviance(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i]), power=1))  # y_pred > 0, y_true ≥ 0; The higher `p` the less weight is given to extreme deviations between true and predicted targets.
-            # 第三组，二次的绝对性指标：
-            MSE.append(metrics.mean_squared_error(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件； this metric penalizes a large residual greater than a small residual because of square
-            MSLE.append(metrics.mean_squared_log_error(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true≥0, y_pred≥0； this metric penalizes an under-predicted estimate greater than an over-predicted estimate because of logarithm
         else: continue
 
-    print('判断前的真实（及预测）序列对数:', len(y_true), '  判断后的真实（及预测）序列对数:', len(y_true_trun))
-    print('原始的评估指标：', '\n')
-    print('第一组，零次的相对性指标：', '\n', 'MAPE:', MAPE, '\n', 'SMAPE:', SMAPE, '\n', 'RMSPE:', RMSPE, '\n', 'MTD_p2:', MTD_p2, '\n', 'VAR:', VAR, '\n')
-    print('第二组，一次的绝对性指标：', '\n', 'EMLAE:', EMLAE, '\n', 'MALE:', MALE, '\n', 'MAE:', MAE, '\n', 'RMSE:', RMSE, '\n', 'MedAE:', MedAE, '\n', 'MTD_p1:', MTD_p1, '\n')
+    if (len(y_true_trun) != len(y_pred_trun)) or (len(y_true_trun) < 2):
+        raise Exception('y_true_trun与y_pred_trun中序列条数必须相等且≥2')  # 若序列对的数目小于2，则数值变换后的指标均为1
+
+    plt.figure('finall input')
+    for i in range(len(y_true_trun)):
+        ax = plt.subplot(len(y_true_trun), 1, i+1)
+        xlim = plt.gca().set_xlim(0, length[i]-1)  # xlim使图形按x轴上的点数充满横坐标
+        y_true_trun[i].plot(ax=ax, legend=True)
+        y_pred_trun[i].plot(ax=ax, legend=True)
+        print('第{0}组实际输入的序列对：'.format(i))
+        print(y_true_trun[i], '\n', y_pred_trun[i], '\n')
+
+    for i in range(len(y_true_trun)):
+        # 第一组，零次的相对性指标：
+        MAPE.append(mape(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true != 0; no bias
+        SMAPE.append(smape(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true + y_pred != 0; symmetric MAPE, no bias and more general, less susceptible to outliers than MAPE.
+        RMSPE.append(eval_measures.rmspe(np.array(y_true_trun[i]), np.array(y_pred_trun[i])) / 10)  # y_true != 0; susceptible to outliers of deviation ratio, if more, RMSPE will be larger than MAPE.
+        MTD_p2.append(metrics.mean_tweedie_deviance(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i]), power=2)) # y_pred > 0, y_true > 0; less susceptible to outliers than MAPE when y_pred[i] / y_true[i] > 1, nevertheless, more susceptible to outliers than MAPE when y_pred[i] / y_true[i] < 1
+        VAR.append(metrics.explained_variance_score(y_true=y_true_trun[i], y_pred=y_pred_trun[i]))  # y_true, y_pred无限制条件；但explained_variance_score为极大化目标函数，值域为(-∞, 1]，越趋近1越好；与其余的极小化目标函数相反，它们的因变量是越小越好。
+        # 第二组，一次的绝对性指标：
+        EMLAE.append(emlae(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件; less susceptible to outliers of error than MAE, so this will penalize small deviation and award large deviation relative to MAE.
+        MALE.append(male(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件;
+        MAE.append(metrics.mean_absolute_error(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件； this metric has no penalty, no bias
+        RMSE.append(eval_measures.rmse(np.array(y_true_trun[i]), np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件；susceptible to outliers of error than MAE, so this will penalize large deviation and award small deviation relative to MAE.
+        MedAE.append(metrics.median_absolute_error(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件； if len(y) is slightly large; won't be affected by outliers completely
+        MTD_p1.append(metrics.mean_tweedie_deviance(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i]), power=1))  # y_pred > 0, y_true ≥ 0; The higher `p` the less weight is given to extreme deviations between true and predicted targets.
+        # 第三组，二次的绝对性指标：
+        MSE.append(metrics.mean_squared_error(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件； this metric penalizes a large residual greater than a small residual because of square
+        MSLE.append(metrics.mean_squared_log_error(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true≥0, y_pred≥0； this metric penalizes an under-predicted estimate greater than an over-predicted estimate because of logarithm
+
+    print('判断前的真实（及预测）序列对数:', len(y_true), '  判断后的真实（及预测）序列对数:', len(y_true_trun), '\n')
+    print('原始的评估指标：')
+    print('第一组，零次的相对性指标：', '\n', 'MAPE:', MAPE, '\n', 'SMAPE:', SMAPE, '\n', 'RMSPE:', RMSPE, '\n', 'MTD_p2:', MTD_p2, '\n', 'VAR:', VAR)
+    print('第二组，一次的绝对性指标：', '\n', 'EMLAE:', EMLAE, '\n', 'MALE:', MALE, '\n', 'MAE:', MAE, '\n', 'RMSE:', RMSE, '\n', 'MedAE:', MedAE, '\n', 'MTD_p1:', MTD_p1)
     print('第三组，二次的绝对性指标：', '\n', 'MSE:', MSE, '\n', 'MSLE:', MSLE, '\n')
 
-    # 将各序列对的若干精度指标整合成各序列对的最终单一评价指标；序列对的数目必须≥2，否则归一化不能起到抹平不同指标不同数量级的作用；
-    # 将各精度指标按序列对的维度进行归一化
-    MAPE_1 = np.sqrt(MAPE / np.mean(MAPE)) / sum(np.sqrt(MAPE / np.mean(MAPE)))
-    SMAPE_1 = np.sqrt(SMAPE / np.mean(SMAPE)) / sum(np.sqrt(SMAPE / np.mean(SMAPE)))
-    RMSPE_1 = np.sqrt(RMSPE / np.mean(RMSPE)) / sum(np.sqrt(RMSPE / np.mean(RMSPE)))
+    # 将各序列对的若干精度指标整合成各序列对的最终单一评价指标；序列对的数目必须≥2，否则归一化后各指标值均为1。
+    # 将各精度指标在各自维度内进行数值变换：1.对各指标除以其均值，将任意数量级的指标转化为在1上下波动的数值。
+    # 2.再对抹平数量级后的指标作开方，进一步缩小指标内数值的差距，保留代表优劣的方向性即可；原始指标内数值差异越大，所开次方根数越大，反之越小，可以避免指标间离群值的出现。
+    # 3.再对list作归一化，将所有结果都转化为(0,1)之间的数，越趋近0越好，代表预测列越趋近真实序列；最终精度presion经过有偏向的加权后，也是(0,1)之间的数值。
+    MAPE_1 = (MAPE / np.mean(MAPE)) / sum(MAPE / np.mean(MAPE))
+    SMAPE_1 = (SMAPE / np.mean(SMAPE)) / sum(SMAPE / np.mean(SMAPE))
+    RMSPE_1 = (RMSPE / np.mean(RMSPE)) / sum(RMSPE / np.mean(RMSPE))
     MTD_p2_1 = np.sqrt(MTD_p2 / np.mean(MTD_p2)) / sum(np.sqrt(MTD_p2 / np.mean(MTD_p2)))
-    VAR_1 = (-np.array(VAR)+1 + np.mean(-np.array(VAR)+1)) / sum(-np.array(VAR)+1 + np.mean(-np.array(VAR)+1))  # 因为VAR的取值范围是(-∞, 1]，越趋近1越好，是极大化目标函数，与其他指标相反；所以需要对其做数值变换，使其变为极小化目标函数，并加上np.mean，使其更适合作归一化。
-    VAR_1 = np.sqrt(VAR_1 / np.mean(VAR_1)) / sum(np.sqrt(VAR_1 / np.mean(VAR_1)))
+    VAR_1 = (-np.array(VAR)+1.01 + np.mean(-np.array(VAR)+1.01)) / sum(-np.array(VAR)+1.01 + np.mean(-np.array(VAR)+1.01))  # 因为VAR的取值范围是(-∞, 1]，越趋近1越好，可看作极大化目标函数，与其他指标相反；所以需要对其做数值变换，使其变为极小化目标函数。
+    VAR_1 = (VAR_1 / np.mean(VAR_1))**(1/4) / sum((VAR_1 / np.mean(VAR_1))**(1/4))                                      # 但不能+1，可以加比1多一点点的任何数，如1.01，否则当原始VAR均为1时，sum(-np.array(VAR)+1 + np.mean(-np.array(VAR)+1))就会为0，则VAR_1就会为nan。
 
     EMLAE_1 = np.sqrt(EMLAE / np.mean(EMLAE)) / sum(np.sqrt(EMLAE / np.mean(EMLAE)))
-    MALE_1 = np.sqrt(MALE / np.mean(MALE)) / sum(np.sqrt(MALE / np.mean(MALE)))
+    MALE_1 = (MALE / np.mean(MALE)) / sum(MALE / np.mean(MALE))
     MAE_1 = np.sqrt(MAE / np.mean(MAE)) / sum(np.sqrt(MAE / np.mean(MAE)))
     RMSE_1 = np.sqrt(RMSE / np.mean(RMSE)) / sum(np.sqrt(RMSE / np.mean(RMSE)))
     MedAE_1 = np.sqrt(MedAE / np.mean(MedAE)) / sum(np.sqrt(MedAE / np.mean(MedAE)))
     MTD_p1_1 = np.sqrt(MTD_p1 / np.mean(MTD_p1)) / sum(np.sqrt(MTD_p1 / np.mean(MTD_p1)))
 
-    MSE_1 = np.sqrt(MSE / np.mean(MSE)) / sum(np.sqrt(MSE / np.mean(MSE)))
+    MSE_1 = (MSE / np.mean(MSE))**(1/4) / sum((MSE / np.mean(MSE))**(1/4))
     MSLE_1 = np.sqrt(MSLE / np.mean(MSLE)) / sum(np.sqrt(MSLE / np.mean(MSLE)))
 
-    print('数值变换后的评估指标：', '\n')
-    print('第一组，零次的相对性指标：', '\n', 'MAPE:', MAPE_1, '\n', 'SMAPE:', SMAPE_1, '\n', 'RMSPE:', RMSPE_1, '\n', 'MTD_p2:', MTD_p2_1, '\n', 'VAR:', VAR_1, '\n')
-    print('第二组，一次的绝对性指标：', '\n', 'EMLAE:', EMLAE_1, '\n', 'MALE:', MALE_1, '\n', 'MAE:', MAE_1, '\n', 'RMSE:', RMSE_1, '\n', 'MedAE:', MedAE_1, '\n', 'MTD_p1:', MTD_p1_1, '\n')
+    print('数值变换后的评估指标：')
+    print('第一组，零次的相对性指标：', '\n', 'MAPE:', MAPE_1, '\n', 'SMAPE:', SMAPE_1, '\n', 'RMSPE:', RMSPE_1, '\n', 'MTD_p2:', MTD_p2_1, '\n', 'VAR_1:', VAR_1)
+    print('第二组，一次的绝对性指标：', '\n', 'EMLAE:', EMLAE_1, '\n', 'MALE:', MALE_1, '\n', 'MAE:', MAE_1, '\n', 'RMSE:', RMSE_1, '\n', 'MedAE:', MedAE_1, '\n', 'MTD_p1:', MTD_p1_1)
     print('第三组，二次的绝对性指标：', '\n', 'MSE:', MSE_1, '\n', 'MSLE:', MSLE_1, '\n')
 
-    # 用简单调和平均计算各序列对经归一化后的各个精度指标，形成各序列对的最终单一精度指标；调和平均受输入样本点离群值的影响最小，相比于其他平均值而言；
     precision = []
     for i in range(len(y_true_trun)):
+        # 不用调和平均、几何平均，避免结果向极小值趋近；不用均方根，避免结果向极大值趋近；使用算术平均加权，权重可根据实际需求手动调整。
         precision.append(dyn_seri_weighted([MAPE_1[i], SMAPE_1[i], RMSPE_1[i], MTD_p2_1[i], VAR_1[i],
                                       EMLAE_1[i], MALE_1[i], MAE_1[i], RMSE_1[i], MedAE_1[i], MTD_p1_1[i],
                                       MSE_1[i], MSLE_1[i]], w=[3,2,2,1,1, 1,1,1,3,1,1, 1,1]))
@@ -428,10 +399,19 @@ def regression_evaluation(y_true, y_pred):
 
     return precision, MAPE, SMAPE, RMSPE, MTD_p2, VAR, EMLAE, MALE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE  # 注意返回的各分量精度指标是未归一化前的数值，而最终precision是由各分量精度指标归一化后的数值算出的
 
-results = regression_evaluation(y_true=y_input_mul_actual, y_pred=y_input_mul_pred)
-results = pd.DataFrame(results, columns=['couple one', 'couple two'], index=['precision',
-                                                                   'MAPE', 'SMAPE', 'RMSPE', 'MTD_p2', 'VAR',
-                                                                   'EMLAE', 'MALE', 'MAE', 'RMSE', 'MedAE', 'MTD_p1',
-                                                                   'MSE', 'MSLE'])
-print('指标数：', len(results))
-print(results)
+
+results_v1 = regression_accuracy(y_true=y_input_mul_actual, y_pred=y_input_mul_pred)
+results_v1 = pd.DataFrame(results_v1, index=['precision',
+                                           'MAPE', 'SMAPE', 'RMSPE', 'MTD_p2',
+                                           'EMLAE', 'MALE', 'MAE', 'RMSE', 'MedAE', 'MTD_p1',
+                                           'MSE', 'MSLE'])
+print('指标数：', len(results_v1))
+print(results_v1, '\n')
+
+results_v2 = regression_evaluation(y_true=y_input_mul_actual, y_pred=y_input_mul_pred)
+results_v2 = pd.DataFrame(results_v2, index=['precision',
+                                           'MAPE', 'SMAPE', 'RMSPE', 'MTD_p2', 'VAR',
+                                           'EMLAE', 'MALE', 'MAE', 'RMSE', 'MedAE', 'MTD_p1',
+                                           'MSE', 'MSLE'])
+print('指标数：', len(results_v2))
+print(results_v2)
