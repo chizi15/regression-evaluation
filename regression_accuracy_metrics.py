@@ -15,7 +15,7 @@ plt.rc('font', size=10)
 # ###########---------------set up and plot input data-----------------######################
 base_value = 10  # 设置level、trend、season项的基数
 steps_day, steps_week = 1, 1
-length = [steps_day*6+steps_day, steps_week*6+steps_week]  # 代表周、日序列对的长度
+length = [steps_day*20+steps_day, steps_week*20+steps_week]  # 代表周、日序列对的长度
 
 weights = []
 for i in range(-base_value + 1, 1):
@@ -317,7 +317,7 @@ def regression_evaluation(y_true, y_pred):
     MAPE, SMAPE, RMSPE, MTD_p2  = [], [], [], []  # 零次的相对性指标
     EMLAE, MALE, MAE, RMSE, MedAE, MTD_p1 = [], [], [], [], [], []  # 一次的绝对性指标
     MSE, MSLE = [], []  # 二次的绝对性指标
-    VAR, R2, PR, SR, KT, WT = [], [], [], [], [], []  # 相关性指标
+    VAR, R2, PR, SR, KT, WT, MGC = [], [], [], [], [], [], []  # 相关性指标
 
     y_true_trun, y_pred_trun = [], []
     for i in range(len(y_true)):
@@ -341,6 +341,8 @@ def regression_evaluation(y_true, y_pred):
         print(y_true_trun[i], '\n', y_pred_trun[i], '\n')
 
     for i in range(len(y_true_trun)):
+        if (len(y_true_trun[i]) < 5) or (len(y_pred_trun[i]) < 5):
+            raise Exception('实际使用的序列对y_true_trun[{0}]与y_pred_trun[{1}]中，点数过少不具有统计意义，每条序列至少要≥5个点'.format(i, i))
         # 第一组，零次的相对性指标：
         MAPE.append(mape(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true != 0; no bias
         SMAPE.append(smape(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true + y_pred != 0; symmetric MAPE, no bias and more general, less susceptible to outliers than MAPE.
@@ -363,13 +365,14 @@ def regression_evaluation(y_true, y_pred):
         SR.append(stats.spearmanr(y_true_trun[i], y_pred_trun[i])[0])
         KT.append(stats.kendalltau(y_true_trun[i], y_pred_trun[i])[0])
         WT.append(stats.weightedtau(y_true_trun[i], y_pred_trun[i])[0])
+        MGC.append(stats.multiscale_graphcorr(np.array(y_true_trun[i]), np.array(y_pred_trun[i]))[0])  # x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
 
     print('判断前的真实（及预测）序列对数:', len(y_true), '  判断后的真实（及预测）序列对数:', len(y_true_trun), '\n')
     print('原始的评估指标：')
     print('第一组，零次的相对性指标：', '\n', 'MAPE:', MAPE, '\n', 'SMAPE:', SMAPE, '\n', 'RMSPE:', RMSPE, '\n', 'MTD_p2:', MTD_p2)
     print('第二组，一次的绝对性指标：', '\n', 'EMLAE:', EMLAE, '\n', 'MALE:', MALE, '\n', 'MAE:', MAE, '\n', 'RMSE:', RMSE, '\n', 'MedAE:', MedAE, '\n', 'MTD_p1:', MTD_p1)
     print('第三组，二次的绝对性指标：', '\n', 'MSE:', MSE, '\n', 'MSLE:', MSLE)
-    print('第四组，相关性指标：', '\n', 'VAR:', VAR, '\n', 'R2:', R2, '\n', 'PR:', PR, '\n', 'SR:', SR, '\n', 'KT:', KT, '\n', 'WT:', WT, '\n')
+    print('第四组，相关性指标：', '\n', 'VAR:', VAR, '\n', 'R2:', R2, '\n', 'PR:', PR, '\n', 'SR:', SR, '\n', 'KT:', KT, '\n', 'WT:', WT, '\n', 'MGC:', MGC, '\n')
 
     # 将各序列对的若干精度指标整合成各序列对的最终单一评价指标；序列对的数目必须≥2，否则归一化后各指标值均为1。
     # 将各精度指标在各自维度内进行数值变换：1.对各指标除以其均值，将任意数量级的指标转化为在1上下波动的数值。
@@ -402,12 +405,14 @@ def regression_evaluation(y_true, y_pred):
     KT_1 = (KT_1 / np.mean(KT_1))**(1/4) / sum((KT_1 / np.mean(KT_1))**(1/4))                                      # 但不能+1，可以加比1多一点点的任何数，如1.01，否则当原始KT均为1时，sum(-np.array(KT)+1 + np.mean(-np.array(KT)+1))就会为0，则KT_1就会为nan。
     WT_1 = (-np.array(WT)+1.01 + np.mean(-np.array(WT)+1.01)) / sum(-np.array(WT)+1.01 + np.mean(-np.array(WT)+1.01))  # 因为WT的取值范围是[-1, 1]，越趋近1越好，可看作极大化目标函数，与其他指标相反；所以需要对其做数值变换，使其变为极小化目标函数。
     WT_1 = (WT_1 / np.mean(WT_1))**(1/4) / sum((WT_1 / np.mean(WT_1))**(1/4))                                      # 但不能+1，可以加比1多一点点的任何数，如1.01，否则当原始WT均为1时，sum(-np.array(WT)+1 + np.mean(-np.array(WT)+1))就会为0，则WT_1就会为nan。
+    MGC_1 = (-np.array(MGC)+1.01 + np.mean(-np.array(MGC)+1.01)) / sum(-np.array(MGC)+1.01 + np.mean(-np.array(MGC)+1.01))  # 因为MGC的取值范围是[-1, 1]，越趋近1越好，可看作极大化目标函数，与其他指标相反；所以需要对其做数值变换，使其变为极小化目标函数。
+    MGC_1 = (MGC_1 / np.mean(MGC_1))**(1/4) / sum((MGC_1 / np.mean(MGC_1))**(1/4))                                      # 但不能+1，可以加比1多一点点的任何数，如1.01，否则当原始MGC均为1时，sum(-np.array(MGC)+1 + np.mean(-np.array(MGC)+1))就会为0，则MGC_1就会为nan。
 
     print('数值变换后的评估指标：')
     print('第一组，零次的相对性指标：', '\n', 'MAPE:', MAPE_1, '\n', 'SMAPE:', SMAPE_1, '\n', 'RMSPE:', RMSPE_1, '\n', 'MTD_p2:', MTD_p2_1)
     print('第二组，一次的绝对性指标：', '\n', 'EMLAE:', EMLAE_1, '\n', 'MALE:', MALE_1, '\n', 'MAE:', MAE_1, '\n', 'RMSE:', RMSE_1, '\n', 'MedAE:', MedAE_1, '\n', 'MTD_p1:', MTD_p1_1)
     print('第三组，二次的绝对性指标：', '\n', 'MSE:', MSE_1, '\n', 'MSLE:', MSLE_1)
-    print('第四组，相关性指标：', '\n', 'VAR:', VAR_1, '\n', 'R2:', R2_1, '\n', 'PR:', PR_1, '\n', 'SR:', SR_1, '\n', 'KT:', KT_1, '\n', 'WT:', WT_1, '\n')
+    print('第四组，相关性指标：', '\n', 'VAR:', VAR_1, '\n', 'R2:', R2_1, '\n', 'PR:', PR_1, '\n', 'SR:', SR_1, '\n', 'KT:', KT_1, '\n', 'WT:', WT_1, '\n', 'MGC:', MGC_1, '\n')
 
     precision = []
     for i in range(len(y_true_trun)):
@@ -415,10 +420,12 @@ def regression_evaluation(y_true, y_pred):
         precision.append(dyn_seri_weighted([MAPE_1[i], SMAPE_1[i], RMSPE_1[i], MTD_p2_1[i],
                                       EMLAE_1[i], MALE_1[i], MAE_1[i], RMSE_1[i], MedAE_1[i], MTD_p1_1[i],
                                       MSE_1[i], MSLE_1[i],
-                                      VAR_1[i], R2_1[i], PR_1[i], SR_1[i], KT_1[i], WT_1[i]], w=[3,2,2,1, 1,1,1,3,1,1, 1,1, 1,1,1,1,1,1]))
+                                      VAR_1[i], R2_1[i], PR_1[i], SR_1[i], KT_1[i], WT_1[i], MGC_1[i]],
+                                      w=[3,2,2,1, 1,1,1,3,1,1, 1,1, 1,1,1,1,1,1,1]))
     print('各序列对的最终精度：', '\n', np.array(precision), '\n')
 
-    return precision, MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MALE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE, VAR, R2, PR, SR, KT, WT  # 注意返回的各分量精度指标是未归一化前的数值，而最终precision是由各分量精度指标归一化后的数值算出的
+    # 注意返回的各分量指标是未数值变换前的结果，而最终precision是由各分量指标经数值变换后的结果加权算出的
+    return precision, MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MALE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE, VAR, R2, PR, SR, KT, WT, MGC
 
 
 results_v1 = regression_accuracy(y_true=y_input_mul_actual, y_pred=y_input_mul_pred)
@@ -434,6 +441,6 @@ results_v2 = pd.DataFrame(results_v2, index=['precision',
                                            'MAPE', 'SMAPE', 'RMSPE', 'MTD_p2',
                                            'EMLAE', 'MALE', 'MAE', 'RMSE', 'MedAE', 'MTD_p1',
                                            'MSE', 'MSLE',
-                                           'VAR', 'R2', 'PR', 'SR', 'KT', 'WT'])
+                                           'VAR', 'R2', 'PR', 'SR', 'KT', 'WT', 'MGC'])
 print('指标个数：', len(results_v2))
 print(results_v2)
