@@ -120,10 +120,10 @@ for i in range(len(y_input_mul_actual)):
 
 def dyn_seri_weighted(seri, type=None, w=None, initial=1, r=2, d=1):
     """
-    传入一维数组seri，可以是series,array,list,tuple；若不输入权重，则根据seri的长度动态计算基于几何级数或算数级数再作归一化的权重，再做算术平均；
+    传入一维数组seri，可以是series,array,list,tuple；若type='geometric'或'arithmetic'，且输入了w，则w不起作用；若不输入权重，则根据seri的长度动态计算基于几何级数或算数级数再作归一化的权重，再做算术平均；
     也可人为输入权重做算术平均；若不输入type和w，则进行简单算数平均；因为使用np.dot，则seri索引越小，权重越大；将seri各点与权重相乘再相加，得到一个最终点。
     :param seri: 需要进行加权变成一个点的一维数组
-    :param type: 采用几何级数或算数级数进行加权，或人为指定权重，或默认权重相等，type = 'geometric'或'arithmetic'或None
+    :param type: 采用几何级数或算数级数进行加权，或人为指定权重，或默认权重相等，type = 'geometric'或'arithmetic'或None；若type='geometric'或'arithmetic'，且输入了w，则w不起作用。
     :param w: 一维的权重系数，可以是series,array,list,tuple；若手动输入，其长度必须和一维数组seri（即序列点数）相等
     :param r: 指定几何级数分母的公比
     :param d: 指定算数级数分母的公差
@@ -235,7 +235,7 @@ def regression_accuracy(y_true, y_pred):
     if (len(y_true_trun) != len(y_pred_trun)) or (len(y_true_trun) < 2):
         raise Exception('y_true_trun与y_pred_trun中序列条数必须相等且≥2')  # 若序列对的数目小于2，则数值变换后的指标均为1
 
-    plt.figure('finall input')
+    plt.figure('finall input of regression_accuracy')
     for i in range(len(y_true_trun)):
         ax = plt.subplot(len(y_true_trun), 1, i+1)
         xlim = plt.gca().set_xlim(0, length[i]-1)  # xlim使图形按x轴上的点数充满横坐标
@@ -331,14 +331,20 @@ def regression_evaluation(y_true, y_pred):
     if (len(y_true_trun) != len(y_pred_trun)) or (len(y_true_trun) < 2):
         raise Exception('y_true_trun与y_pred_trun中序列条数必须相等且≥2')  # 若序列对的数目小于2，则数值变换后的指标均为1
 
-    plt.figure('finall input')
+    plt.figure('finall input of regression_evaluation')
     for i in range(len(y_true_trun)):
         ax = plt.subplot(len(y_true_trun), 1, i+1)
         xlim = plt.gca().set_xlim(0, length[i]-1)  # xlim使图形按x轴上的点数充满横坐标
-        y_true_trun[i].plot(ax=ax, legend=True)
-        y_pred_trun[i].plot(ax=ax, legend=True)
+        y_true_trun[i].plot(ax=ax, legend=True, color='r')
+        y_pred_trun[i].plot(ax=ax, legend=True, color='g')
         print('第{0}组实际输入的序列对：'.format(i))
         print(y_true_trun[i], '\n', y_pred_trun[i], '\n')
+
+    for i in range(len(y_true_trun)):
+        plt.figure('the 4th group of correlation fuctions use following scatters as {0}th inputs'.format(i))
+        plt.scatter(y=y_true_trun[i], x=y_pred_trun[i])
+        plt.xlabel('y_pred_trun[{0}]'.format(i))
+        plt.ylabel('y_true_trun[{0}]'.format(i))
 
     for i in range(len(y_true_trun)):
         if (len(y_true_trun[i]) < 5) or (len(y_pred_trun[i]) < 5):
@@ -361,11 +367,11 @@ def regression_evaluation(y_true, y_pred):
         # 第四组，相关性指标：
         VAR.append(metrics.explained_variance_score(y_true=y_true_trun[i], y_pred=y_pred_trun[i]))  # y_true, y_pred无限制条件；但explained_variance_score为极大化目标函数，值域为(-∞, 1]，越趋近1越好；与其余的极小化目标函数相反，它们的因变量是越小越好。
         R2.append(metrics.r2_score(y_true=y_true_trun[i], y_pred=y_pred_trun[i]))  # y_true, y_pred的series中，至少要有≥2个点，否则会返回nan；r2_score也为极大化目标函数，值域为(-∞, 1]，越趋近1越好；与其余的极小化目标函数相反，它们的因变量是越小越好。
-        PR.append(stats.pearsonr(y_true_trun[i], y_pred_trun[i])[0])
-        SR.append(stats.spearmanr(y_true_trun[i], y_pred_trun[i])[0])
-        KT.append(stats.kendalltau(y_true_trun[i], y_pred_trun[i])[0])
-        WT.append(stats.weightedtau(y_true_trun[i], y_pred_trun[i])[0])
-        MGC.append(stats.multiscale_graphcorr(np.array(y_true_trun[i]), np.array(y_pred_trun[i]))[0])  # x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
+        PR.append(stats.pearsonr(x=y_true_trun[i], y=y_pred_trun[i])[0])
+        SR.append(stats.spearmanr(a=y_true_trun[i], b=y_pred_trun[i])[0])
+        KT.append(stats.kendalltau(x=y_true_trun[i], y=y_pred_trun[i])[0])
+        WT.append(stats.weightedtau(x=y_true_trun[i], y=y_pred_trun[i])[0])
+        MGC.append(stats.multiscale_graphcorr(x=np.array(y_true_trun[i]), y=np.array(y_pred_trun[i]))[0])  # hardly affected by abnormal scatters (i.e. outliers); x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
 
     print('判断前的真实（及预测）序列对数:', len(y_true), '  判断后的真实（及预测）序列对数:', len(y_true_trun), '\n')
     print('原始的评估指标：')
