@@ -15,7 +15,7 @@ plt.rc('font', size=10)
 # ###########---------------set up and plot input data-----------------######################
 base_value = 10  # 设置level、trend、season项的基数
 steps_day, steps_week = 1, 1
-length = [steps_day*20+steps_day, steps_week*20+steps_week]  # 代表周、日序列对的长度
+length = [steps_day*20+steps_day, steps_week*20+steps_week, steps_week*20+steps_week]  # 代表周、日序列对的长度
 
 weights = []
 for i in range(-base_value + 1, 1):
@@ -101,19 +101,19 @@ for i in range(len(y_input_mul_actual)):
 预测结果评价函数的使用方法:
 1. 评价种类、品类群、课别、企业、全体层级的结果时，将企业种类的各对预测金额及理论销售金额传入函数，而不是将各汇总层级的序列对输入函数，避免低层级的偏差信息因正负号不同而消失；
 评价单品、品种层级的结果时，将企业单品的各对预测销量及理论销量传入函数。不用单品评价结果去计算种类及更高层级的精度，是因为预测系统算法设计的优化目标是企业种类预测金额，而不是直接优化单品预测销量。
-2. 当同一目标有三种序列时：预测2.0、预测1.0、实际销售，应把预测2.0和实际销售、预测1.0和实际销售分别传入函数regression_accuracy，
-来评价预测2.0贴近实际销售的程度、预测1.0贴近实际销售的程度。当要评价预测2.0和预测1.0的偏离程度时，应把从regression_accuracy得到的两种值，再传入函数smape得到偏离程度。
-因为smape是所有指标里唯一具有无偏性的百分比指标，不是以某一种序列为目标，评价另一种序列趋近该种序列的程度；所以不应把预测2.0和预测1.0传入regression_accuracy直接得到偏离程度。
-也不能将预测2.0与预测1.0拼到一起，与理论销售作为一个整体的序列对传入regression_accuracy，因为两种预测结果是由两种不同模型得到的，若拼到一起，
-在后续归一化时会相互影响，进而也会影响其后的调和平均，从而不能对每种模型的预测结果得到准确的相互独立的评价结果。
+2. 当同一目标有三种序列时：预测2.0、预测1.0、实际销售，应把预测2.0和实际销售、预测1.0和实际销售分别传入函数regression_evaluation，
+来评价预测2.0贴近实际销售的程度、预测1.0贴近实际销售的程度。当要评价预测2.0和预测1.0的偏离程度时，应把从regression_evaluation得到的两种值，再传入函数smape得到偏离程度。
+因为smape是所有指标里唯一具有无偏性的百分比指标，不是以某一种序列为目标，评价另一种序列趋近该种序列的程度；所以不应把预测2.0和预测1.0传入regression_evaluation直接得到偏离程度。
+也不能将预测2.0与预测1.0拼到一起，与理论销售作为一个整体的序列对传入regression_evaluation，因为两种预测结果是由两种不同模型得到的，若拼到一起，
+在后续归一化时会相互影响，进而也会影响其后的加权平均，从而不能对每种模型的预测结果得到准确的相互独立的评价结果。
 3. 除了最终指标precision是最重要的评价指标外，如果更关心平时的预测结果，参考MAPE更好；如果更关心节假日期间的预测结果，参考RMSE(eval_measures.rmse)更好。
-4. 若要评价某个具体的企业种类的预测结果，不能将这个序列对输入regression_accuracy，可以输入分项函数中的任意一个；
-若要评价某个种类的预测结果，则将各个企业种类的预测序列和真实序列组成的序列对传入regression_accuracy，对返回结果按序列求平均，得到该种类的预测评价结果；
-此时序列对中的y_true根据企业的不同而不同；而不是将该种类的汇总序列对传入regression_accuracy。若要对某个具体的企业单品、某个单品的预测结果进行评价，与4中方法类似。
-5. 若要评价某个企业品类群的预测结果，则将该企业品类群下所有企业种类序列对传入regression_accuracy，对返回结果按序列求平均，此时序列对中的y_true是不同的，因为是不同的企业种类的理论销售；
-而不是将该品类群的汇总序列对传入regression_accuracy。若要对某个企业课别、某个企业、全体的预测结果进行评价，与5中方法类似；
-若要对某个企业品种、某个品种的预测结果进行评价，也与5中方法类似，只是传入regression_accuracy的是由企业单品构成的序列对。
-6. 若要评价（优选）不同算法模型或不同中间计算结果对同一企业种类的预测结果，则传入regression_accuracy的序列对中y_true是相同的，因为是同一企业种类的理论销售。
+4. 若要评价某个具体的企业种类的预测结果，不能将这个序列对输入regression_evaluation，可以输入分项函数中的任意一个；
+若要评价某个种类的预测结果，则将各个企业种类的预测序列和真实序列组成的序列对传入regression_evaluation，对返回结果按序列求平均，得到该种类的预测评价结果；
+此时序列对中的y_true根据企业的不同而不同；而不是将该种类的汇总序列对传入regression_evaluation。若要对某个具体的企业单品、某个单品的预测结果进行评价，与4中方法类似。
+5. 若要评价某个企业品类群的预测结果，则将该企业品类群下所有企业种类序列对传入regression_evaluation，对返回结果按序列求平均，此时序列对中的y_true是不同的，因为是不同的企业种类的理论销售；
+而不是将该品类群的汇总序列对传入regression_evaluation。若要对某个企业课别、某个企业、全体的预测结果进行评价，与5中方法类似；
+若要对某个企业品种、某个品种的预测结果进行评价，也与5中方法类似，只是传入regression_evaluation的是由企业单品构成的序列对。
+6. 若要评价（优选）不同算法模型或不同中间计算结果对同一企业种类的预测结果，则传入regression_evaluation的序列对中y_true是相同的，因为是同一企业种类的理论销售。
 7. 综上，可完成对任一层级、每个层级下任一子集的准确评价。
 """
 
@@ -452,3 +452,45 @@ results_v2 = pd.DataFrame(results_v2, index=['precision',
                                            'VAR', 'R2', 'PR', 'SR', 'KT', 'WT', 'MGC'])
 print('指标个数：', len(results_v2))
 print(results_v2)
+
+
+# 使用步骤：1.将每个门店单品，两种模型的一段历史区间，预测序列和真实序列的两组序列对，输入regression_evaluation，得到两个评估指标；
+# 2.对这两个指标进行如下操作，得到每个门店单品的两个模型在下一个月所要采用的权重w；
+w = (1-results_v2.loc['precision']) / (1-results_v2.loc['precision']).sum()
+# 因为regression_evaluation返回的最终评估指标precision是(0,1)之间的值，越趋近0则模型预测结果越好，所以需要使用一个递减函数对precision做变换，才能得到真正能使用的权重。
+# 这里采用y=1-x，而不用y=1/x，可以避免当x较小时，1/x被放大过多，且一点微小的扰动都会对1/x产生较大影响的不利效应。
+# 3.预测下一个月的新数据时，将每个门店单品两个模型的预测序列和各自权重w输入dyn_df_weighted，得到一条预测序列，就是最终发布的预测值。
+
+
+def dyn_df_weighted(df, type=None, w=None, initial=1, r=2, d=1):
+    """
+    传入二维数组df；若type='geometric'或'arithmetic'，且输入了w，则w不起作用；若不输入权重，则根据df的列数动态计算基于几何级数或算数级数再作归一化的权重，再做算术平均；
+    也可人为输入权重做算术平均；若不输入type和w，则进行简单算数平均；因为使用np.matmul，则df.columns的索引越小，权重越大；将df的各列与权重相乘再相加，得到一条最终的序列。
+    :param df: 需要进行加权变成一条序列的二维数组，df的每列代表一条需要进行加权的序列
+    :param type: 采用几何级数或算数级数进行加权，或人为指定权重，或默认权重相等，type = 'geometric'或'arithmetic'或None；若type='geometric'或'arithmetic'，且输入了w，则w不起作用。
+    :param w: 一维的权重系数，可以是series,array,list,tuple；若手动输入，其长度必须和一维数组seri（即序列点数）相等
+    :param r: 指定几何级数分母的公比
+    :param d: 指定算数级数分母的公差
+    :param initial: 指定算数级数分母的初始值
+    :return: df各列与权重w相乘再相加，返回一条最终的序列
+    """
+    if type not in ['geometric', 'arithmetic', None]:
+        raise Exception('type must be one of geometric, arithmetic or None')
+    if type is not None:
+        w = list()
+        if type == 'geometric':
+            for i in range(len(df.columns)):
+                w.append(initial * (1 / r) ** i)  # 生成首项是initial，公比是(1/r)的几何级数作权重
+        else:
+            for i in range(len(df.columns)):
+                w.append(1 / (initial + d * i))  # 生成首项是initial，公差是d的算术级数，再做倒数作为权重
+        w = np.array(w) / sum(w)
+    elif (type is None) and (w is None):
+        w = np.ones(len(df.columns)) / sum(np.ones(len(df.columns)))  # 生成均等权重
+    elif (type is None) and (w is not None) and (len(w) == len(df.columns)):
+        w = np.array(w) / sum(w)  # 自定义权重
+    else:
+        raise Exception('手动输入的权重长度必须和一维数组长度（即序列点数）相等')
+    if abs(sum(w)-1) > 0.001:
+        raise Exception('weights are not useable')
+    return np.matmul(df.values, w)
