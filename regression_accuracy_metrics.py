@@ -79,7 +79,7 @@ for i in range(0, len(length)):
 
 for i in range(len(y_input_mul_actual)):
     # 绘制真实值和对应的预测值序列
-    plt.figure('initial {0}'.format(i), figsize=(5,10))
+    plt.figure('origin {0}'.format(i), figsize=(5,10))
     ax1 = plt.subplot(5,1,1)
     ax2 = plt.subplot(5,1,2)
     ax3 = plt.subplot(5,1,3)
@@ -269,7 +269,7 @@ def regression_accuracy(y_true, y_pred):
 
     # 将各序列对的若干精度指标整合成各序列对的最终单一评价指标；序列对的数目必须≥2，否则归一化后各指标值均为1。
     # 将各精度指标在各自维度内进行数值变换：1.对各指标除以其均值，将任意数量级的指标转化为在1上下波动的数值。
-    # 2.再对抹平数量级后的指标作开方，进一步缩小指标内数值的差距，保留代表优劣的方向性即可；原始指标内数值差异越大，所开次方根数越大，反之越小，可以避免指标间离群值的出现。
+    # 2.再对抹平数量级后的指标取幂函数，进一步缩小指标内数值的差距，保留代表优劣的方向性即可；原始指标内数值差异越大，所开次方根数越大，反之越小，可以避免指标间离群值的出现。
     # 3.再对list作归一化，将所有结果都转化为(0,1)之间的数，越趋近0越好，代表预测列越趋近真实序列；最终精度presion经过有偏向的加权后，也是(0,1)之间的数值。
     MAPE_1 = (MAPE / np.mean(MAPE)) / sum(MAPE / np.mean(MAPE))
     SMAPE_1 = (SMAPE / np.mean(SMAPE)) / sum(SMAPE / np.mean(SMAPE))
@@ -331,16 +331,18 @@ def regression_evaluation(y_true, y_pred):
     if (len(y_true_trun) != len(y_pred_trun)) or (len(y_true_trun) < 2):
         raise Exception('y_true_trun与y_pred_trun中序列条数必须相等且≥2')  # 若序列对的数目小于2，则数值变换后的指标均为1
 
-    plt.figure('finall input of regression_evaluation')
+    plt.figure('finall inputs of first three groups of accuracy functions')
     for i in range(len(y_true_trun)):
+        # 前三组精度函数使用如图所示形态的数据作为输入值
         ax = plt.subplot(len(y_true_trun), 1, i+1)
         xlim = plt.gca().set_xlim(0, length[i]-1)  # xlim使图形按x轴上的点数充满横坐标
-        y_true_trun[i].plot(ax=ax, legend=True, color='r')
-        y_pred_trun[i].plot(ax=ax, legend=True, color='g')
+        y_true_trun[i].plot(ax=ax, legend=True)
+        y_pred_trun[i].plot(ax=ax, legend=True)
         print('第{0}组实际输入的序列对：'.format(i))
         print(y_true_trun[i], '\n', y_pred_trun[i], '\n')
 
     for i in range(len(y_true_trun)):
+        # 第四组相关性函数使用如图所示形态的数据作为输入值。此for循环不能与上一个for循环合并，否则会错误调用plt。
         plt.figure('the 4th group of correlation fuctions use following scatters as {0}th inputs'.format(i))
         plt.scatter(y=y_true_trun[i], x=y_pred_trun[i])
         plt.xlabel('y_pred_trun[{0}]'.format(i))
@@ -382,7 +384,7 @@ def regression_evaluation(y_true, y_pred):
 
     # 将各序列对的若干精度指标整合成各序列对的最终单一评价指标；序列对的数目必须≥2，否则归一化后各指标值均为1。
     # 将各精度指标在各自维度内进行数值变换：1.对各指标除以其均值，将任意数量级的指标转化为在1上下波动的数值。
-    # 2.再对抹平数量级后的指标作开方，进一步缩小指标内数值的差距，保留代表优劣的方向性即可；原始指标内数值差异越大，所开次方根数越大，反之越小，可以避免指标间离群值的出现。
+    # 2.再对抹平数量级后的指标取幂函数，进一步缩小指标内数值的差距，保留代表优劣的方向性即可；原始指标内数值差异越大，所开次方根数越大，反之越小，可以避免指标间离群值的出现。
     # 3.再对list作归一化，将所有结果都转化为(0,1)之间的数，越趋近0越好，代表预测列越趋近真实序列；最终精度presion经过有偏向的加权后，也是(0,1)之间的数值。
     MAPE_1 = (MAPE / np.mean(MAPE)) / sum(MAPE / np.mean(MAPE))
     SMAPE_1 = (SMAPE / np.mean(SMAPE)) / sum(SMAPE / np.mean(SMAPE))
