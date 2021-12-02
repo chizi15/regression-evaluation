@@ -15,7 +15,7 @@ pd.set_option('display.max_columns', None)
 # ###########---------------set up and plot input data-----------------######################
 base_value = 10  # 设置level、trend、season项的基数
 steps_day, steps_week = 1, 1
-length = [steps_day*20+steps_day, steps_week*20+steps_week, steps_week*20+steps_week]  # 代表周、日序列对的长度
+length = [steps_day*20+steps_day, steps_week*20+steps_week, steps_week*20+steps_week]*2  # 代表周、日序列对的长度
 
 weights = []
 for i in range(-base_value + 1, 1):
@@ -418,18 +418,18 @@ def regression_correlaiton_pairs(y_true, y_pred):
             if (len(y_true_trun[i]) < 5) or (len(y_pred_trun[i]) < 5):
                 raise Exception('实际使用的序列对y_true_trun[{0}]与y_pred_trun[{1}]中，点数过少不具有统计意义，每条序列至少要≥5个点'.format(i, i))
             # PR当序列对在散点图中的斜率接近±1或0，各个点的斜率稍有变化时，容易识别为线性无关，此种情况应是较强的线性相关性；PR的特性表现为越趋近临界值（各点斜率趋近±1，0），鲁棒性越差
-            PR.append(stats.pearsonr(x=y_true_trun[i], y=y_pred_trun[i]))
+            PR.append(stats.pearsonr(x=y_true_trun[i], y=y_pred_trun[i]))  # Two-tailed p-value
             PRmul.append(PR[i][0] * (1 - PR[i][1]))
             # SR和PR有相似的上述鲁棒性问题，但鲁棒性稍好；KT和WT的鲁棒性也好于PR
-            SR.append(stats.spearmanr(a=y_true_trun[i], b=y_pred_trun[i]))
+            SR.append(stats.spearmanr(a=y_true_trun[i], b=y_pred_trun[i]))  # The two-sided p-value for a hypothesis test whose null hypothesis is that two sets of data are uncorrelated
             SRmul.append(SR[i][0] * (1 - SR[i][1]))
-            KT.append(stats.kendalltau(x=y_true_trun[i], y=y_pred_trun[i]))
+            KT.append(stats.kendalltau(x=y_true_trun[i], y=y_pred_trun[i]))  # The two-sided p-value for a hypothesis test whose null hypothesis is an absence of association, tau = 0.
             KTmul.append(KT[i][0] * (1 - KT[i][1]))
             WT.append(stats.weightedtau(x=y_true_trun[i], y=y_pred_trun[i]))
             WTmul.append(WT[i][0] * 0.95)  # suppose the p-value is 0.05
             # MGC几乎没有上述鲁棒性问题，且reps越大，p-values越可信，但计算量越大
             MGC.append(
-                stats.multiscale_graphcorr(x=y_true_trun[i].values, y=y_pred_trun[i].values, workers=-1,
+                stats.multiscale_graphcorr(x=y_true_trun[i].values, y=y_pred_trun[i].values, workers=1,
                                            reps=0)[
                 :2])  # hardly affected by abnormal scatters (i.e. outliers); x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
             MGCmul.append(MGC[i][0] * 0.95)  # suppose the p-value is 0.05
@@ -506,7 +506,7 @@ def regression_correlaiton_single(y_true, y_pred):
     WT = stats.weightedtau(x=y_true_trun, y=y_pred_trun)
     WTmul = WT[0] * 0.95  # suppose the p-value is 0.05
     # MGC几乎没有上述鲁棒性问题，且reps越大，p-values越可信，但计算量越大
-    MGC = stats.multiscale_graphcorr(x=y_true_trun.values, y=y_pred_trun.values, workers=-1, reps=0)[:2]  # hardly affected by abnormal scatters (i.e. outliers); x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
+    MGC = stats.multiscale_graphcorr(x=y_true_trun.values, y=y_pred_trun.values, workers=1, reps=0)[:2]  # hardly affected by abnormal scatters (i.e. outliers); x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
     MGCmul = MGC[0] * 0.95  # suppose the p-value is 0.05
 
     print('原始的各个相关性指标（越接近1正相关性越强，越接近-1负相关性越强，越接近0相关性越弱）：', '\n', 'PR:', PR, '\n', 'SR:', SR, '\n', 'KT:', KT, '\n', 'WT:', WT, '\n', 'MGC:', MGC, '\n')
@@ -547,6 +547,19 @@ def regression_correlaiton_single(y_true, y_pred):
     df_raw['correlation'] = a
 
     return df_raw[['correlation', 'PRmul', 'SRmul', 'KTmul', 'WTmul', 'MGCmul']], [y_true_trun, y_pred_trun]
+
+
+def correlation_population(pop1, pop2):
+    """
+    x,y: ndarray，每一行代表一个样本，每一列代表一个特征。
+    return: 返回这两个ndarray的综合相关性和p-value，代表两个总体pop1和pop2间的相关程度。
+    计算来自两个总体pop1和pop2的n个样本，所组成的两个ndarray间的综合相关性，每个ndarray有n行m列，其中n是从总体中随机抽取的样本数，m是每个样本的特征数；
+    当workers=-1，每次会从两个ndarray中抽取k对样本，传到cpu的k个线程中计算每对样本各自的相关性，直到将ndarray中所有样本对计算完。
+    """
+    corr = stats.multiscale_graphcorr(x=pd.DataFrame(pop1, columns=list(pop1[0].index)).values
+    , y=pd.DataFrame(pop2, columns=list(pop2[0].index)).values, workers=-1, reps=1000)[:2]  # hardly affected by abnormal scatters (i.e. outliers); x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
+
+    return corr
 
 
 def regression_evaluation_pairs(y_true, y_pred):
@@ -807,6 +820,9 @@ results_v6 = pd.DataFrame(results_v6_all[:-2], index=[
                                            'VAR', 'R2', 'PR', 'SR', 'KT', 'WT', 'MGC'])
 print('指标个数：', len(results_v6))
 print(results_v6, '\n')
+
+results_v7 = correlation_population(pop1=y_input_mul_actual[:], pop2=y_input_mul_pred[:])
+print('\n''两组ndarray的综合相关性：', results_v7[0], '\n', 'p-values:', results_v7[1], '\n')
 
 ################################################################################################################
 # 将评估函数结果用于动态加权的使用方法：
