@@ -299,7 +299,7 @@ def regression_correlaiton_pairs(y_true, y_pred):
             WTmul.append(WT[i][0] * 0.95)  # suppose the p-value is 0.05
             # MGC几乎没有上述鲁棒性问题，且reps越大，p-values越可信，但计算量越大
             MGC.append(
-                stats.multiscale_graphcorr(x=y_true_trun[i].values, y=y_pred_trun[i].values, workers=-1,
+                stats.multiscale_graphcorr(x=y_true_trun[i].values, y=y_pred_trun[i].values, workers=1,
                                            reps=0)[
                 :2])  # hardly affected by abnormal scatters (i.e. outliers); x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
             MGCmul.append(MGC[i][0] * 0.95)  # suppose the p-value is 0.05
@@ -368,7 +368,7 @@ def regression_correlaiton_single(y_true, y_pred):
     WT = stats.weightedtau(x=y_true_trun, y=y_pred_trun)
     WTmul = WT[0] * 0.95  # suppose the p-value is 0.05
     # MGC几乎没有上述鲁棒性问题，且reps越大，p-values越可信，但计算量越大
-    MGC = stats.multiscale_graphcorr(x=y_true_trun.values, y=y_pred_trun.values, workers=-1, reps=0)[:2]  # hardly affected by abnormal scatters (i.e. outliers); x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
+    MGC = stats.multiscale_graphcorr(x=y_true_trun.values, y=y_pred_trun.values, workers=1, reps=0)[:2]  # hardly affected by abnormal scatters (i.e. outliers); x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
     MGCmul = MGC[0] * 0.95  # suppose the p-value is 0.05
 
     # 对各个相关性指标考虑置信度：p-value越大，越不能拒绝原假设（序列对无关），备择假设（序列对相关）越不可信，则相关系数乘以越小的系数，则认为序列对的实际相关性，跟计算出的相关系数比，越低
@@ -407,6 +407,19 @@ def regression_correlaiton_single(y_true, y_pred):
     df_raw['correlation'] = a
 
     return df_raw[['correlation', 'PRmul', 'SRmul', 'KTmul', 'WTmul', 'MGCmul']], [y_true_trun, y_pred_trun]
+
+
+def correlation_population(pop1, pop2):
+    """
+    x,y: ndarray，每一行代表一个样本，每一列代表一个特征。
+    return: 返回这两个ndarray的综合相关性和p-value，代表两个总体pop1和pop2间的相关程度。
+    计算来自两个总体pop1和pop2的n个样本，所组成的两个ndarray间的综合相关性，每个ndarray有n行m列，其中n是从总体中随机抽取的样本数，m是每个样本的特征数；
+    当workers=-1，每次会从两个ndarray中抽取k对样本，传到cpu的k个线程中计算每对样本各自的相关性，直到将ndarray中所有样本对计算完。
+    """
+    corr = stats.multiscale_graphcorr(x=pd.DataFrame(pop1, columns=list(pop1[0].index)).values
+    , y=pd.DataFrame(pop2, columns=list(pop2[0].index)).values, workers=-1, reps=1000)[:2]  # hardly affected by abnormal scatters (i.e. outliers); x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
+
+    return corr
 
 
 def regression_evaluation_pairs(y_true, y_pred):
