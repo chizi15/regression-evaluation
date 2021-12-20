@@ -1,3 +1,23 @@
+"""
+预测结果评价函数的使用方法:
+1. 评价种类、品类群、课别、企业、全体层级的结果时，将企业种类的各对预测金额及理论销售金额传入函数，而不是将各汇总层级的序列对输入函数，避免低层级的偏差信息因正负号不同而消失；
+评价单品、品种层级的结果时，将企业单品的各对预测销量及理论销量传入函数。不用单品评价结果去计算种类及更高层级的精度，是因为预测系统算法设计的优化目标是企业种类预测金额，而不是直接优化单品预测销量。
+2. 当同一目标有三种序列时：预测2.0、预测1.0、实际销售，应把预测2.0和实际销售、预测1.0和实际销售分别传入函数regression_evaluation，
+来评价预测2.0贴近实际销售的程度、预测1.0贴近实际销售的程度。当要评价预测2.0和预测1.0的偏离程度时，应把从regression_evaluation得到的两种值，再传入函数smape得到偏离程度。
+因为smape是所有指标里唯一具有无偏性的百分比指标，不是以某一种序列为目标，评价另一种序列趋近该种序列的程度；所以不应把预测2.0和预测1.0传入regression_evaluation直接得到偏离程度。
+也不能将预测2.0与预测1.0拼到一起，与理论销售作为一个整体的序列对传入regression_evaluation，因为两种预测结果是由两种不同模型得到的，若拼到一起，
+在后续归一化时会相互影响，进而也会影响其后的加权平均，从而不能对每种模型的预测结果得到准确的相互独立的评价结果。
+3. 除了最终指标precision是最重要的评价指标外，如果更关心平时的预测结果，参考MAPE更好；如果更关心节假日期间的预测结果，参考RMSE(eval_measures.rmse)更好。
+4. 若要评价某个具体的企业种类的预测结果，不能将这个序列对输入regression_evaluation，可以输入分项函数中的任意一个；
+若要评价某个种类的预测结果，则将各个企业种类的预测序列和真实序列组成的序列对传入regression_evaluation，对返回结果按序列求平均，得到该种类的预测评价结果；
+此时序列对中的y_true根据企业的不同而不同；而不是将该种类的汇总序列对传入regression_evaluation。若要对某个具体的企业单品、某个单品的预测结果进行评价，与4中方法类似。
+5. 若要评价某个企业品类群的预测结果，则将该企业品类群下所有企业种类序列对传入regression_evaluation，对返回结果按序列求平均，此时序列对中的y_true是不同的，因为是不同的企业种类的理论销售；
+而不是将该品类群的汇总序列对传入regression_evaluation。若要对某个企业课别、某个企业、全体的预测结果进行评价，与5中方法类似；
+若要对某个企业品种、某个品种的预测结果进行评价，也与5中方法类似，只是传入regression_evaluation的是由企业单品构成的序列对。
+6. 若要评价（优选）不同算法模型或不同中间计算结果对同一企业种类的预测结果，则传入regression_evaluation的序列对中y_true是相同的，因为是同一企业种类的理论销售。
+7. 综上，可完成对任一层级、每个层级下任一子集的准确评价。
+"""
+
 import pandas as pd
 import numpy as np
 from sklearn import metrics
@@ -392,10 +412,7 @@ def regression_correlaiton_pairs(y_true, y_pred):
             WT.append(stats.weightedtau(x=y_true_trun[i], y=y_pred_trun[i]))
             WTmul.append(WT[i][0] * 0.95)  # suppose the p-value is 0.05
             # MGC几乎没有上述鲁棒性问题，且reps越大，p-values越可信，但计算量越大
-            MGC.append(
-                stats.multiscale_graphcorr(x=y_true_trun[i].values, y=y_pred_trun[i].values, workers=1,
-                                           reps=0)[
-                :2])  # hardly affected by abnormal scatters (i.e. outliers); x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
+            MGC.append(stats.multiscale_graphcorr(x=np.array(y_true_trun[i]), y=np.array(y_pred_trun[i]), workers=1, reps=0)[:2])  # hardly affected by abnormal scatters (i.e. outliers); x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
             MGCmul.append(MGC[i][0] * 0.95)  # suppose the p-value is 0.05
 
         # 对各个相关性指标考虑置信度：p-value越大，越不能拒绝原假设（序列对无关），备择假设（序列对相关）越不可信，则相关系数乘以越小的系数，则认为序列对的实际相关性，跟计算出的相关系数比，越低
@@ -439,7 +456,7 @@ def regression_correlaiton_pairs(y_true, y_pred):
         raise Exception('y_true_trun与y_pred_trun中序列条数必须相等且>1')
 
 
-def regression_correlaiton_single(y_true, y_pred):
+def regression_correlaiton_single(y_true, y_pred, type='low'):
     """
     :param y_true: 一条真实序列，并与预测序列按顺序一一对应；y_true是历史上进模型之前的可能经过处理的真实值。
     :param y_pred: 一条预测序列，并与真实序列按顺序一一对应；y_pred是历史上该模型输出的预测值，或者经过补偿的预测值，总之是最终用于订货的预测值。
@@ -447,61 +464,125 @@ def regression_correlaiton_single(y_true, y_pred):
     :return: 各个相关性指标，按顺序分别是：综合相关性指标，PR, SR, KT, WT, MGC
     """
 
-    y_true_trun, y_pred_trun = y_true, y_pred
+    y_true_trun, y_pred_trun = np.array(y_true), np.array(y_pred)
+    error = 'no'
+    if type=='high' and len(y_true_trun) >= 5 and len(y_pred_trun) >= 5:
+        try:
+            # PR当序列对在散点图中的斜率接近±1或0，各个点的斜率稍有变化时，容易识别为线性无关，此种情况应是较强的线性相关性；PR的特性表现为越趋近临界值（各点斜率趋近±1，0），鲁棒性越差
+            PR = stats.pearsonr(x=y_true_trun, y=y_pred_trun)
+            PRmul = PR[0] * (1 - PR[1])
+            # SR和PR有相似的上述鲁棒性问题，但鲁棒性稍好；KT和WT的鲁棒性也好于PR
+            SR = stats.spearmanr(a=y_true_trun, b=y_pred_trun)
+            SRmul = SR[0] * (1 - SR[1])
+            KT = stats.kendalltau(x=y_true_trun, y=y_pred_trun)
+            KTmul = KT[0] * (1 - KT[1])
+            WT = stats.weightedtau(x=y_true_trun, y=y_pred_trun)
+            WTmul = WT[0] * 0.95  # suppose the p-value is 0.05
+            # MGC几乎没有上述鲁棒性问题，且reps越大，p-values越可信，但计算量越大
+            MGC = stats.multiscale_graphcorr(x=y_true_trun, y=y_pred_trun, workers=1, reps=0)[
+                  :2]  # hardly affected by abnormal scatters (i.e. outliers); x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
+            MGCmul = MGC[0] * 0.95  # suppose the p-value is 0.05
 
-    if (len(y_true_trun) < 5) or (len(y_pred_trun) < 5):
-        raise Exception('实际使用的序列对y_true_trun与y_pred_trun中，点数过少不具有统计意义，每条序列至少要≥5个点')
-    # PR当序列对在散点图中的斜率接近±1或0，各个点的斜率稍有变化时，容易识别为线性无关，此种情况应是较强的线性相关性；PR的特性表现为越趋近临界值（各点斜率趋近±1，0），鲁棒性越差
-    PR = stats.pearsonr(x=y_true_trun, y=y_pred_trun)
-    PRmul = PR[0] * (1 - PR[1])
-    # SR和PR有相似的上述鲁棒性问题，但鲁棒性稍好；KT和WT的鲁棒性也好于PR
-    SR = stats.spearmanr(a=y_true_trun, b=y_pred_trun)
-    SRmul = SR[0] * (1 - SR[1])
-    KT = stats.kendalltau(x=y_true_trun, y=y_pred_trun)
-    KTmul = KT[0] * (1 - KT[1])
-    WT = stats.weightedtau(x=y_true_trun, y=y_pred_trun)
-    WTmul = WT[0] * 0.95  # suppose the p-value is 0.05
-    # MGC几乎没有上述鲁棒性问题，且reps越大，p-values越可信，但计算量越大
-    MGC = stats.multiscale_graphcorr(x=y_true_trun.values, y=y_pred_trun.values, workers=1, reps=0)[:2]  # hardly affected by abnormal scatters (i.e. outliers); x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
-    MGCmul = MGC[0] * 0.95  # suppose the p-value is 0.05
+            # 对各个相关性指标考虑置信度：p-value越大，越不能拒绝原假设（序列对无关），备择假设（序列对相关）越不可信，则相关系数乘以越小的系数，则认为序列对的实际相关性，跟计算出的相关系数比，越低
+            metrics_raw = {'PRmul': PRmul, 'SRmul': SRmul, 'KTmul': KTmul, 'WTmul': WTmul,
+                           'MGCmul': MGCmul}  # samples belong the row, metrics belong the colmun
+            df_raw = pd.DataFrame(metrics_raw, index={'corr of series'})
+            # 对所有样本的各个指标取均值和中位数作为计算指标权重的基准；考虑到计算速度，没有对各列剔除最大最小值后再算均值
+            df_raw['mean'] = (df_raw.mean(axis=1) + df_raw.median(axis=1)) / 2
+            # 计算所有样本各种指标值与其基准值的距离
+            for i in range(len(metrics_raw)):
+                df_raw['D_{}'.format(df_raw.columns[i])] = abs(df_raw[df_raw.columns[i]] - df_raw['mean'])
+            a = 0
+            # 对所有样本的各个距离求和
+            for i in range(len(metrics_raw)):
+                a += df_raw['D_{}'.format(df_raw.columns[i])]
+            df_raw['D_sum'] = a
+            # 对距离的比例取相反数，使距离越大，其值越小，并为线性关系。再+1使距离比例为正，则归一化后为正确逻辑的权重；若不使距离比例为正，则归一化后仍是距离越大权重越大的错误逻辑
+            for i in range(len(metrics_raw)):
+                df_raw['w_{}_raw'.format(df_raw.columns[i])] = 1 - df_raw['D_{}'.format(df_raw.columns[i])] / df_raw[
+                    'D_sum']
+            # 计算调整逻辑后的权重之和
+            a = 0
+            for i in range(len(metrics_raw)):
+                a += df_raw['w_{}_raw'.format(df_raw.columns[i])]
+            if a.mean() - len(metrics_raw) - 1 > 1e-10:
+                raise Exception('权重变换有误')
+            df_raw['w_sum'] = a
+            # 计算调整逻辑后的各个权重
+            for i in range(len(metrics_raw)):
+                df_raw['weight_{}'.format(df_raw.columns[i])] = df_raw['w_{}_raw'.format(df_raw.columns[i])] / df_raw[
+                    'w_sum']
+            # 用调整后的权重计算各个指标的加权平均
+            a = 0
+            for i in range(len(metrics_raw)):
+                a += df_raw[df_raw.columns[i]] * df_raw['weight_{}'.format(df_raw.columns[i])]
+            df_raw['correlation'] = a
 
-    # 对各个相关性指标考虑置信度：p-value越大，越不能拒绝原假设（序列对无关），备择假设（序列对相关）越不可信，则相关系数乘以越小的系数，则认为序列对的实际相关性，跟计算出的相关系数比，越低
-    metrics_raw = {'PRmul': PRmul, 'SRmul': SRmul, 'KTmul': KTmul, 'WTmul': WTmul,
-                   'MGCmul': MGCmul}  # samples belong the row, metrics belong the colmun
-    df_raw = pd.DataFrame(metrics_raw, index={'corr of series'})
-    # 对所有样本的各个指标取均值和中位数作为计算指标权重的基准；考虑到计算速度，没有对各列剔除最大最小值后再算均值
-    df_raw['mean'] = (df_raw.mean(axis=1) + df_raw.median(axis=1)) / 2
-    # 计算所有样本各种指标值与其基准值的距离
-    for i in range(len(metrics_raw)):
-        df_raw['D_{}'.format(df_raw.columns[i])] = abs(df_raw[df_raw.columns[i]] - df_raw['mean'])
-    a = 0
-    # 对所有样本的各个距离求和
-    for i in range(len(metrics_raw)):
-        a += df_raw['D_{}'.format(df_raw.columns[i])]
-    df_raw['D_sum'] = a
-    # 对距离的比例取相反数，使距离越大，其值越小，并为线性关系。再+1使距离比例为正，则归一化后为正确逻辑的权重；若不使距离比例为正，则归一化后仍是距离越大权重越大的错误逻辑
-    for i in range(len(metrics_raw)):
-        df_raw['w_{}_raw'.format(df_raw.columns[i])] = 1 - df_raw['D_{}'.format(df_raw.columns[i])] / df_raw[
-            'D_sum']
-    # 计算调整逻辑后的权重之和
-    a = 0
-    for i in range(len(metrics_raw)):
-        a += df_raw['w_{}_raw'.format(df_raw.columns[i])]
-    if a.mean() - len(metrics_raw) - 1 > 1e-10:
-        raise Exception('权重变换有误')
-    df_raw['w_sum'] = a
-    # 计算调整逻辑后的各个权重
-    for i in range(len(metrics_raw)):
-        df_raw['weight_{}'.format(df_raw.columns[i])] = df_raw['w_{}_raw'.format(df_raw.columns[i])] / df_raw[
-            'w_sum']
-    # 用调整后的权重计算各个指标的加权平均
-    a = 0
-    for i in range(len(metrics_raw)):
-        a += df_raw[df_raw.columns[i]] * df_raw['weight_{}'.format(df_raw.columns[i])]
-    df_raw['correlation'] = a
+            return df_raw[['correlation', 'PRmul', 'SRmul', 'KTmul', 'WTmul', 'MGCmul']], [y_true_trun, y_pred_trun]
 
-    return df_raw[['correlation', 'PRmul', 'SRmul', 'KTmul', 'WTmul', 'MGCmul']], [y_true_trun, y_pred_trun]
+        except Exception as e:
+            error = e
+            print('MGC error: ', error)
+            metrics_raw = {'correlation': 0, 'PRmul': np.nan, 'SRmul': np.nan, 'KTmul': np.nan, 'WTmul': np.nan}  # samples belong the row, metrics belong the colmun
+            df_raw = pd.DataFrame(metrics_raw, index={'corr of series'})
+            return df_raw[['correlation', 'PRmul', 'SRmul', 'KTmul', 'WTmul']], [y_true_trun, y_pred_trun]
 
+    if error != 'no' or type=='low' or (type=='high' and (len(y_true_trun) < 5 or len(y_pred_trun) < 5)):
+        try:
+            # PR当序列对在散点图中的斜率接近±1或0，各个点的斜率稍有变化时，容易识别为线性无关，此种情况应是较强的线性相关性；PR的特性表现为越趋近临界值（各点斜率趋近±1，0），鲁棒性越差
+            PR = stats.pearsonr(x=y_true_trun, y=y_pred_trun)
+            PRmul = PR[0] * (1 - PR[1])
+            # SR和PR有相似的上述鲁棒性问题，但鲁棒性稍好；KT和WT的鲁棒性也好于PR
+            SR = stats.spearmanr(a=y_true_trun, b=y_pred_trun)
+            SRmul = SR[0] * (1 - SR[1])
+            KT = stats.kendalltau(x=y_true_trun, y=y_pred_trun)
+            KTmul = KT[0] * (1 - KT[1])
+            WT = stats.weightedtau(x=y_true_trun, y=y_pred_trun)
+            WTmul = WT[0] * 0.95  # suppose the p-value is 0.05
+
+            # 对各个相关性指标考虑置信度：p-value越大，越不能拒绝原假设（序列对无关），备择假设（序列对相关）越不可信，则相关系数乘以越小的系数，则认为序列对的实际相关性，跟计算出的相关系数比，越低
+            metrics_raw = {'PRmul': PRmul, 'SRmul': SRmul, 'KTmul': KTmul, 'WTmul': WTmul}  # samples belong the row, metrics belong the colmun
+            df_raw = pd.DataFrame(metrics_raw, index={'corr of series'})
+            # 对所有样本的各个指标取均值和中位数作为计算指标权重的基准；考虑到计算速度，没有对各列剔除最大最小值后再算均值
+            df_raw['mean'] = (df_raw.mean(axis=1) + df_raw.median(axis=1)) / 2
+            # 计算所有样本各种指标值与其基准值的距离
+            for i in range(len(metrics_raw)):
+                df_raw['D_{}'.format(df_raw.columns[i])] = abs(df_raw[df_raw.columns[i]] - df_raw['mean'])
+            a = 0
+            # 对所有样本的各个距离求和
+            for i in range(len(metrics_raw)):
+                a += df_raw['D_{}'.format(df_raw.columns[i])]
+            df_raw['D_sum'] = a
+            # 对距离的比例取相反数，使距离越大，其值越小，并为线性关系。再+1使距离比例为正，则归一化后为正确逻辑的权重；若不使距离比例为正，则归一化后仍是距离越大权重越大的错误逻辑
+            for i in range(len(metrics_raw)):
+                df_raw['w_{}_raw'.format(df_raw.columns[i])] = 1 - df_raw['D_{}'.format(df_raw.columns[i])] / df_raw[
+                    'D_sum']
+            # 计算调整逻辑后的权重之和
+            a = 0
+            for i in range(len(metrics_raw)):
+                a += df_raw['w_{}_raw'.format(df_raw.columns[i])]
+            if a.mean() - len(metrics_raw) - 1 > 1e-10:
+                raise Exception('权重变换有误')
+            df_raw['w_sum'] = a
+            # 计算调整逻辑后的各个权重
+            for i in range(len(metrics_raw)):
+                df_raw['weight_{}'.format(df_raw.columns[i])] = df_raw['w_{}_raw'.format(df_raw.columns[i])] / df_raw[
+                    'w_sum']
+            # 用调整后的权重计算各个指标的加权平均
+            a = 0
+            for i in range(len(metrics_raw)):
+                a += df_raw[df_raw.columns[i]] * df_raw['weight_{}'.format(df_raw.columns[i])]
+            df_raw['correlation'] = a
+
+            return df_raw[['correlation', 'PRmul', 'SRmul', 'KTmul', 'WTmul']], [y_true_trun, y_pred_trun]
+
+        except Exception as e:
+            print('sample error: ', e)
+            metrics_raw = {'correlation': np.nan, 'PRmul': np.nan, 'SRmul': np.nan, 'KTmul': np.nan, 'WTmul': np.nan}  # samples belong the row, metrics belong the colmun
+            df_raw = pd.DataFrame(metrics_raw, index={'corr of series'})
+            return df_raw[['correlation', 'PRmul', 'SRmul', 'KTmul', 'WTmul']], [y_true_trun, y_pred_trun]
+    else:
+        raise Exception('type must be either low or high')
 
 def correlation_population(pop1, pop2):
     """
