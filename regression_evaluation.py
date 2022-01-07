@@ -1,3 +1,23 @@
+"""
+预测结果评价函数的使用方法:
+1. 评价种类、品类群、课别、企业、全体层级的结果时，将企业种类的各对预测金额及理论销售金额传入函数，而不是将各汇总层级的序列对输入函数，避免低层级的偏差信息因正负号不同而消失；
+评价单品、品种层级的结果时，将企业单品的各对预测销量及理论销量传入函数。不用单品评价结果去计算种类及更高层级的精度，是因为预测系统算法设计的优化目标是企业种类预测金额，而不是直接优化单品预测销量。
+2. 当同一目标有三种序列时：预测2.0、预测1.0、实际销售，应把预测2.0和实际销售、预测1.0和实际销售分别传入函数regression_evaluation，
+来评价预测2.0贴近实际销售的程度、预测1.0贴近实际销售的程度。当要评价预测2.0和预测1.0的偏离程度时，应把从regression_evaluation得到的两种值，再传入函数smape得到偏离程度。
+因为smape是所有指标里唯一具有无偏性的百分比指标，不是以某一种序列为目标，评价另一种序列趋近该种序列的程度；所以不应把预测2.0和预测1.0传入regression_evaluation直接得到偏离程度。
+也不能将预测2.0与预测1.0拼到一起，与理论销售作为一个整体的序列对传入regression_evaluation，因为两种预测结果是由两种不同模型得到的，若拼到一起，
+在后续归一化时会相互影响，进而也会影响其后的加权平均，从而不能对每种模型的预测结果得到准确的相互独立的评价结果。
+3. 除了最终指标precision是最重要的评价指标外，如果更关心平时的预测结果，参考MAPE更好；如果更关心节假日期间的预测结果，参考RMSE(eval_measures.rmse)更好。
+4. 若要评价某个具体的企业种类的预测结果，不能将这个序列对输入regression_evaluation，可以输入分项函数中的任意一个；
+若要评价某个种类的预测结果，则将各个企业种类的预测序列和真实序列组成的序列对传入regression_evaluation，对返回结果按序列求平均，得到该种类的预测评价结果；
+此时序列对中的y_true根据企业的不同而不同；而不是将该种类的汇总序列对传入regression_evaluation。若要对某个具体的企业单品、某个单品的预测结果进行评价，与4中方法类似。
+5. 若要评价某个企业品类群的预测结果，则将该企业品类群下所有企业种类序列对传入regression_evaluation，对返回结果按序列求平均，此时序列对中的y_true是不同的，因为是不同的企业种类的理论销售；
+而不是将该品类群的汇总序列对传入regression_evaluation。若要对某个企业课别、某个企业、全体的预测结果进行评价，与5中方法类似；
+若要对某个企业品种、某个品种的预测结果进行评价，也与5中方法类似，只是传入regression_evaluation的是由企业单品构成的序列对。
+6. 若要评价（优选）不同算法模型或不同中间计算结果对同一企业种类的预测结果，则传入regression_evaluation的序列对中y_true是相同的，因为是同一企业种类的理论销售。
+7. 综上，可完成对任一层级、每个层级下任一子集的准确评价。
+"""
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,10 +33,12 @@ sns.set_style('darkgrid')
 plt.rc('font', size=10)
 pd.set_option('display.max_columns', None)
 
+
 # ###########---------------set up and plot input data-----------------######################
 base_value = 10  # 设置level、trend、season项的基数
 steps_day, steps_week = 1, 1
-length = [steps_day*20+steps_day, steps_week*20+steps_week, steps_week*20+steps_week]*2  # 代表周、日序列对的长度
+n, m = 100, 2
+length = [steps_day*n+steps_day, steps_week*n+steps_week, steps_week*n+steps_week]*m  # 代表周、日序列对的长度，及序列对数目3*m
 
 weights = []
 for i in range(-base_value + 1, 1):
@@ -42,11 +64,11 @@ for i in range(0, len(length)):
     print(f'第{i}条真实序列中噪音项的极差：{max(y_noise_actual[i]) - min(y_noise_actual[i])}，均值：{np.mean(y_noise_actual[i])}')
     print(f'第{i}条真实乘法性序列最终极差：{max(y_input_mul_actual[i]) - min(y_input_mul_actual[i])}，均值：{np.mean(y_input_mul_actual[i])}', '\n')
 
-    y_level_actual[i] = pd.Series(y_level_actual[i]).rename('y_level_actual')
-    y_trend_actual[i] = pd.Series(y_trend_actual[i]).rename('y_trend_actual')
-    y_season_actual[i] = pd.Series(y_season_actual[i]).rename('y_season_actual')
-    y_noise_actual[i] = pd.Series(y_noise_actual[i]).rename('y_noise_actual')
-    y_input_mul_actual[i] = pd.Series(y_input_mul_actual[i]).rename('y_input_mul_actual')
+    y_level_actual[i] = pd.Series(np.around(y_level_actual[i], decimals=2)).rename('y_level_actual')
+    y_trend_actual[i] = pd.Series(np.around(y_trend_actual[i], decimals=2)).rename('y_trend_actual')
+    y_season_actual[i] = pd.Series(np.around(y_season_actual[i], decimals=2)).rename('y_season_actual')
+    y_noise_actual[i] = pd.Series(np.around(y_noise_actual[i], decimals=2)).rename('y_noise_actual')
+    y_input_mul_actual[i] = pd.Series(np.around(y_input_mul_actual[i], decimals=2)).rename('y_input_mul_actual')
     # y_input_mul_actual[i][y_input_mul_actual[i] < 0.011] = 0.011  # 将series中小于0.011的数置为0.011；因为后续regression_accuracy，regression_evaluation会将series中小于0的置为0.01，若此处不将小于0.011的置为0.011，则画出的图可能与后续两个综合评估函数中所使用的序列不一致。
     print('第{0}条真实序列的初始生成值：'.format(i))
     print(y_input_mul_actual[i], '\n')
@@ -69,11 +91,11 @@ for i in range(0, len(length)):
     print(f'第{i}条预测序列中噪音项的极差：{max(y_noise_pred[i]) - min(y_noise_pred[i])}，均值：{np.mean(y_noise_pred[i])}')
     print(f'第{i}条预测乘法性序列最终极差：{max(y_input_mul_pred[i]) - min(y_input_mul_pred[i])}，均值：{np.mean(y_input_mul_pred[i])}', '\n')
 
-    y_level_pred[i] = pd.Series(y_level_pred[i]).rename('y_level_pred')
-    y_trend_pred[i] = pd.Series(y_trend_pred[i]).rename('y_trend_pred')
-    y_season_pred[i] = pd.Series(y_season_pred[i]).rename('y_season_pred')
-    y_noise_pred[i] = pd.Series(y_noise_pred[i]).rename('y_noise_pred')
-    y_input_mul_pred[i] = pd.Series(y_input_mul_pred[i]).rename('y_input_mul_pred')
+    y_level_pred[i] = pd.Series(np.around(y_level_pred[i], decimals=2)).rename('y_level_pred')
+    y_trend_pred[i] = pd.Series(np.around(y_trend_pred[i], decimals=2)).rename('y_trend_pred')
+    y_season_pred[i] = pd.Series(np.around(y_season_pred[i], decimals=2)).rename('y_season_pred')
+    y_noise_pred[i] = pd.Series(np.around(y_noise_pred[i], decimals=2)).rename('y_noise_pred')
+    y_input_mul_pred[i] = pd.Series(np.around(y_input_mul_pred[i], decimals=2)).rename('y_input_mul_pred')
     # y_input_mul_pred[i][y_input_mul_pred[i] < 0.011] = 0.011  # 将series中小于0.011的数置为0.011；因为后续regression_accuracy，regression_evaluation会将series中小于0的置为0.01，若此处不将小于0.011的置为0.011，则画出的图可能与后续两个综合评估函数中所使用的序列不一致。
     print('第{0}条预测序列的初始生成值：'.format(i))
     print(y_input_mul_pred[i], '\n')
@@ -96,6 +118,23 @@ for i in range(len(y_input_mul_actual)):
     y_trend_pred[i].plot(ax=ax3, legend=True)
     y_season_pred[i].plot(ax=ax4, legend=True)
     y_noise_pred[i].plot(ax=ax5, legend=True)
+
+
+def print_execute_time(func):
+    from time import time
+    # 定义嵌套函数，用来打印出装饰的函数的执行时间
+    def wrapper(*args, **kwargs):
+        # 定义开始时间和结束时间，将func夹在中间执行，取得其返回值
+        start = time()
+        func_return = func(*args, **kwargs)
+        end = time()
+        # 打印方法名称和其执行时间
+        print(f'{func.__name__}() execute time: {end - start}s')
+        # 返回func的返回值
+        return func_return
+
+    # 返回嵌套的内层函数
+    return wrapper
 
 
 def geo_zscore(samples, bias=1, ddof=1):
@@ -337,7 +376,7 @@ def male(y_true, y_pred):
     male = sum(abs(np.log(abs(y_true+1)) - np.log(abs(y_pred+1)))) / len(y_true)
     return male
 
-
+@print_execute_time
 def regression_accuracy_pairs(y_true, y_pred):
     """
     :param y_true: 若干条真实序列组成的一个二维list或array或series，其中的每条真实序列必须是带索引的series，为了能对>0的数值的索引取交集；并与y_pred中的预测序列按顺序一一对应
@@ -488,7 +527,7 @@ def regression_accuracy_single(y_true, y_pred):
     # 无法得出最终precision，因为各指标的结果数量级不同，又没有其他序列对得出的指标结果作归一化消除数量级的影响
     return MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MALE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE, y_true_trun, y_pred_trun
 
-
+@print_execute_time
 def regression_correlaiton_pairs(y_true, y_pred):
     """
     :param y_true: 若干条真实序列组成的一个二维list或array或series；并与y_pred中的预测序列按顺序一一对应；y_true是历史上进模型之前的可能经过处理的真实值。
@@ -525,8 +564,8 @@ def regression_correlaiton_pairs(y_true, y_pred):
             WTmul.append(WT[i][0] * 0.95)  # suppose the p-value is 0.05
             # MGC几乎没有上述鲁棒性问题，且reps越大，p-values越可信，但计算量越大
             MGC.append(
-                stats.multiscale_graphcorr(x=y_true_trun[i].values, y=y_pred_trun[i].values, workers=1,
-                                           reps=0)[
+                stats.multiscale_graphcorr(x=np.array(y_true_trun[i]), y=np.array(y_pred_trun[i]), workers=1,
+                                           reps=0, random_state=1)[
                 :2])  # hardly affected by abnormal scatters (i.e. outliers); x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
             MGCmul.append(MGC[i][0] * 0.95)  # suppose the p-value is 0.05
 
@@ -574,77 +613,115 @@ def regression_correlaiton_pairs(y_true, y_pred):
         raise Exception('y_true_trun与y_pred_trun中序列条数必须相等且>1')
 
 
-def regression_correlaiton_single(y_true, y_pred):
+def regression_correlaiton_single(y_true, y_pred, type='high'):
     """
     :param y_true: 一条真实序列，并与预测序列按顺序一一对应；y_true是历史上进模型之前的可能经过处理的真实值。
     :param y_pred: 一条预测序列，并与真实序列按顺序一一对应；y_pred是历史上该模型输出的预测值，或者经过补偿的预测值，总之是最终用于订货的预测值。
     y_true，y_pred也可以是需要进行相关性计算的多组序列对，其中每条序列中的元素个数是每个样本的特征数
-    :return: 各个相关性指标，按顺序分别是：综合相关性指标，PR, SR, KT, WT, MGC
+    :type: 'high' includes MGC, which is the best but time costs, however, 'low' does not include.
+    :return: 各个相关性指标，按顺序分别是：综合相关性指标，PR, SR, KT, WT, MGC(type='high')
     """
 
-    y_true_trun, y_pred_trun = y_true, y_pred
-    # 相关性函数使用如图所示形态的数据作为输入值
-    plt.figure('finall input of regression_correlaiton_single, correlation fuctions use following scatters as inputs')
+    y_true_trun, y_pred_trun = np.array(y_true), np.array(y_pred)
+    error = 'no'
+
+    # 各个相关性函数使用如图所示形态的数据作为输入值
+    plt.figure('inputs of regression_correlaiton_single, correlation fuctions use following scatters as inputs')
     plt.scatter(y=y_true_trun, x=y_pred_trun)
     plt.xlabel('y_pred_trun')
     plt.ylabel('y_true_trun')
 
-    if (len(y_true_trun) < 5) or (len(y_pred_trun) < 5):
-        raise Exception('实际使用的序列对y_true_trun与y_pred_trun中，点数过少不具有统计意义，每条序列至少要≥5个点')
-    # PR当序列对在散点图中的斜率接近±1或0，各个点的斜率稍有变化时，容易识别为线性无关，此种情况应是较强的线性相关性；PR的特性表现为越趋近临界值（各点斜率趋近±1，0），鲁棒性越差
-    PR = stats.pearsonr(x=y_true_trun, y=y_pred_trun)
-    PRmul = PR[0] * (1 - PR[1])
-    # SR和PR有相似的上述鲁棒性问题，但鲁棒性稍好；KT和WT的鲁棒性也好于PR
-    SR = stats.spearmanr(a=y_true_trun, b=y_pred_trun)
-    SRmul = SR[0] * (1 - SR[1])
-    KT = stats.kendalltau(x=y_true_trun, y=y_pred_trun)
-    KTmul = KT[0] * (1 - KT[1])
-    WT = stats.weightedtau(x=y_true_trun, y=y_pred_trun)
-    WTmul = WT[0] * 0.95  # suppose the p-value is 0.05
-    # MGC几乎没有上述鲁棒性问题，且reps越大，p-values越可信，但计算量越大
-    MGC = stats.multiscale_graphcorr(x=y_true_trun.values, y=y_pred_trun.values, workers=1, reps=0)[:2]  # hardly affected by abnormal scatters (i.e. outliers); x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
-    MGCmul = MGC[0] * 0.95  # suppose the p-value is 0.05
+    if type=='high' and len(y_true_trun) >= 5 and len(y_pred_trun) >= 5:
+        try:
+            # PR当序列对在散点图中的斜率接近±1或0，各个点的斜率稍有变化时，容易识别为线性无关，此种情况应是较强的线性相关性；PR的特性表现为越趋近临界值（各点斜率趋近±1，0），鲁棒性越差；以及对离群点的适应问题
+            PR = stats.pearsonr(x=y_true_trun, y=y_pred_trun)
+            PRmul = PR[0] * (1 - PR[1])
+            # SR和PR有相似的上述鲁棒性问题，但鲁棒性稍好；KT和WT的鲁棒性也好于PR
+            SR = stats.spearmanr(a=y_true_trun, b=y_pred_trun)
+            SRmul = SR[0] * (1 - SR[1])
+            KT = stats.kendalltau(x=y_true_trun, y=y_pred_trun)
+            KTmul = KT[0] * (1 - KT[1])
+            WT = stats.weightedtau(x=y_true_trun, y=y_pred_trun)
+            WTmul = WT[0] * 0.95  # suppose the p-value is 0.05
+            # MGC几乎没有上述鲁棒性问题，且reps越大，p-values越可信，但计算量越大
+            # bacause MGC uses knn inside, if the length of series is longer, the iterations of knn will be much more, therefore the consumption of time will be much more.
+            MGC = stats.multiscale_graphcorr(x=y_true_trun, y=y_pred_trun, workers=1, reps=0, random_state=1)[
+                  :2]  # hardly affected by abnormal scatters (i.e. outliers); x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
+            MGCmul = MGC[0] * 0.95  # suppose the p-value is 0.05
 
-    print('原始的各个相关性指标（越接近1正相关性越强，越接近-1负相关性越强，越接近0相关性越弱）：', '\n', 'PR:', PR, '\n', 'SR:', SR, '\n', 'KT:', KT, '\n', 'WT:', WT, '\n', 'MGC:', MGC, '\n')
+            # 对各个相关性指标考虑置信度：p-value越大，越不能拒绝原假设（序列对无关），备择假设（序列对相关）越不可信，则相关系数乘以越小的系数，则认为序列对的实际相关性，跟计算出的相关系数比，越低
+            metrics_raw = np.array([PRmul, SRmul, KTmul, WTmul, MGCmul])
+            # 对所有样本的各个指标取均值和中位数作为计算指标权重的基准；考虑到计算速度，没有对各列剔除最大最小值后再算均值
+            corr_mean = (np.mean(metrics_raw) + np.median(metrics_raw)) / 2
+            # 计算所有样本各种指标值与其基准值的距离
+            df_distance = np.abs(metrics_raw - corr_mean)
+            # 对所有样本的各个距离求和
+            dist_sum = df_distance.sum()
+            # 对距离的比例取相反数，使距离越大，其值越小，并为线性关系。再+1使距离比例为正，则归一化后为正确逻辑的权重；若不使距离比例为正，则归一化后仍是距离越大权重越大的错误逻辑
+            df_wight = 1 - df_distance / dist_sum
+            # 计算调整逻辑后的权重之和
+            df_wight_sum = df_wight.sum()
+            # 计算调整逻辑后的各个权重，并用调整后的权重计算各个指标的加权平均
+            wighted_corr = np.sum(metrics_raw * df_wight / df_wight_sum)
 
-    # 对各个相关性指标考虑置信度：p-value越大，越不能拒绝原假设（序列对无关），备择假设（序列对相关）越不可信，则相关系数乘以越小的系数，则认为序列对的实际相关性，跟计算出的相关系数比，越低
-    metrics_raw = {'PRmul': PRmul, 'SRmul': SRmul, 'KTmul': KTmul, 'WTmul': WTmul,
-                   'MGCmul': MGCmul}  # samples belong the row, metrics belong the colmun
-    df_raw = pd.DataFrame(metrics_raw, index={'corr of series'})
-    # 对所有样本的各个指标取均值和中位数作为计算指标权重的基准；考虑到计算速度，没有对各列剔除最大最小值后再算均值
-    df_raw['mean'] = (df_raw.mean(axis=1) + df_raw.median(axis=1)) / 2
-    # 计算所有样本各种指标值与其基准值的距离
-    for i in range(len(metrics_raw)):
-        df_raw['D_{}'.format(df_raw.columns[i])] = abs(df_raw[df_raw.columns[i]] - df_raw['mean'])
-    a = 0
-    # 对所有样本的各个距离求和
-    for i in range(len(metrics_raw)):
-        a += df_raw['D_{}'.format(df_raw.columns[i])]
-    df_raw['D_sum'] = a
-    # 对距离的比例取相反数，使距离越大，其值越小，并为线性关系。再+1使距离比例为正，则归一化后为正确逻辑的权重；若不使距离比例为正，则归一化后仍是距离越大权重越大的错误逻辑
-    for i in range(len(metrics_raw)):
-        df_raw['w_{}_raw'.format(df_raw.columns[i])] = 1 - df_raw['D_{}'.format(df_raw.columns[i])] / df_raw[
-            'D_sum']
-    # 计算调整逻辑后的权重之和
-    a = 0
-    for i in range(len(metrics_raw)):
-        a += df_raw['w_{}_raw'.format(df_raw.columns[i])]
-    if a.mean() - len(metrics_raw) - 1 > 1e-10:
-        raise Exception('权重变换有误')
-    df_raw['w_sum'] = a
-    # 计算调整逻辑后的各个权重
-    for i in range(len(metrics_raw)):
-        df_raw['weight_{}'.format(df_raw.columns[i])] = df_raw['w_{}_raw'.format(df_raw.columns[i])] / df_raw[
-            'w_sum']
-    # 用调整后的权重计算各个指标的加权平均
-    a = 0
-    for i in range(len(metrics_raw)):
-        a += df_raw[df_raw.columns[i]] * df_raw['weight_{}'.format(df_raw.columns[i])]
-    df_raw['correlation'] = a
+            metrics_raw = {'PRmul': PRmul, 'SRmul': SRmul, 'KTmul': KTmul, 'WTmul': WTmul,
+                           'MGCmul': MGCmul}  # samples belong the row, metrics belong the colmun
+            df_raw = pd.DataFrame(metrics_raw, index={'corr of series'})
+            df_raw['correlation'] = wighted_corr
 
-    return df_raw[['correlation', 'PRmul', 'SRmul', 'KTmul', 'WTmul', 'MGCmul']], [y_true_trun, y_pred_trun]
+            return df_raw[['correlation', 'PRmul', 'SRmul', 'KTmul', 'WTmul', 'MGCmul']], [y_true_trun, y_pred_trun]
 
+        except Exception as e:
+            error = e
+            print('MGC error: ', error)
+            metrics_raw = {'correlation': 0, 'PRmul': np.nan, 'SRmul': np.nan, 'KTmul': np.nan, 'WTmul': np.nan}  # samples belong the row, metrics belong the colmun
+            df_raw = pd.DataFrame(metrics_raw, index={'corr of series'})
+            return df_raw[['correlation', 'PRmul', 'SRmul', 'KTmul', 'WTmul']], [y_true_trun, y_pred_trun]
 
+    if error != 'no' or type=='low' or (type=='high' and (len(y_true_trun) < 5 or len(y_pred_trun) < 5)):
+        try:
+            # PR当序列对在散点图中的斜率接近±1或0，各个点的斜率稍有变化时，容易识别为线性无关，此种情况应是较强的线性相关性；PR的特性表现为越趋近临界值（各点斜率趋近±1，0），鲁棒性越差
+            PR = stats.pearsonr(x=y_true_trun, y=y_pred_trun)
+            PRmul = PR[0] * (1 - PR[1])
+            # SR和PR有相似的上述鲁棒性问题，但鲁棒性稍好；KT和WT的鲁棒性也好于PR
+            SR = stats.spearmanr(a=y_true_trun, b=y_pred_trun)
+            SRmul = SR[0] * (1 - SR[1])
+            KT = stats.kendalltau(x=y_true_trun, y=y_pred_trun)
+            KTmul = KT[0] * (1 - KT[1])
+            WT = stats.weightedtau(x=y_true_trun, y=y_pred_trun)
+            WTmul = WT[0] * 0.95  # suppose the p-value is 0.05
+
+            # 对各个相关性指标考虑置信度：p-value越大，越不能拒绝原假设（序列对无关），备择假设（序列对相关）越不可信，则相关系数乘以越小的系数，则认为序列对的实际相关性，跟计算出的相关系数比，越低
+            metrics_raw = np.array([PRmul, SRmul, KTmul, WTmul])
+            # 对所有样本的各个指标取均值和中位数作为计算指标权重的基准；考虑到计算速度，没有对各列剔除最大最小值后再算均值
+            corr_mean = (np.mean(metrics_raw) + np.median(metrics_raw)) / 2
+            # 计算所有样本各种指标值与其基准值的距离
+            df_distance = np.abs(metrics_raw - corr_mean)
+            # 对所有样本的各个距离求和
+            dist_sum = df_distance.sum()
+            # 对距离的比例取相反数，使距离越大，其值越小，并为线性关系。再+1使距离比例为正，则归一化后为正确逻辑的权重；若不使距离比例为正，则归一化后仍是距离越大权重越大的错误逻辑
+            df_wight = 1 - df_distance / dist_sum
+            # 计算调整逻辑后的权重之和
+            df_wight_sum = df_wight.sum()
+            # 计算调整逻辑后的各个权重，并用调整后的权重计算各个指标的加权平均
+            wighted_corr = np.sum(metrics_raw * df_wight / df_wight_sum)
+
+            # 对各个相关性指标考虑置信度：p-value越大，越不能拒绝原假设（序列对无关），备择假设（序列对相关）越不可信，则相关系数乘以越小的系数，则认为序列对的实际相关性，跟计算出的相关系数比，越低
+            metrics_raw = {'PRmul': PRmul, 'SRmul': SRmul, 'KTmul': KTmul, 'WTmul': WTmul}  # samples belong the row, metrics belong the colmun
+            df_raw = pd.DataFrame(metrics_raw, index={'corr of series'})
+            df_raw['correlation'] = wighted_corr
+
+            return df_raw[['correlation', 'PRmul', 'SRmul', 'KTmul', 'WTmul']], [y_true_trun, y_pred_trun]
+
+        except Exception as e:
+            print('sample error: ', e)
+            metrics_raw = {'correlation': np.nan, 'PRmul': np.nan, 'SRmul': np.nan, 'KTmul': np.nan, 'WTmul': np.nan}  # samples belong the row, metrics belong the colmun
+            df_raw = pd.DataFrame(metrics_raw, index={'corr of series'})
+            return df_raw[['correlation', 'PRmul', 'SRmul', 'KTmul', 'WTmul']], [y_true_trun, y_pred_trun]
+    else:
+        raise Exception('type must be either low or high')
+
+@print_execute_time
 def correlation_population(pop1, pop2):
     """
     x,y: ndarray，每一行代表一个样本，每一列代表一个特征。
@@ -653,11 +730,11 @@ def correlation_population(pop1, pop2):
     当workers=-1，每次会从两个ndarray中抽取k对样本，传到cpu的k个线程中计算每对样本各自的相关性，直到将ndarray中所有样本对计算完。
     """
     corr = stats.multiscale_graphcorr(x=pd.DataFrame(pop1, columns=list(pop1[0].index)).values
-    , y=pd.DataFrame(pop2, columns=list(pop2[0].index)).values, workers=-1, reps=1000)[:2]  # hardly affected by abnormal scatters (i.e. outliers); x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
+    , y=pd.DataFrame(pop2, columns=list(pop2[0].index)).values, workers=-1, reps=1000, random_state=1)[:2]  # hardly affected by abnormal scatters (i.e. outliers); x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
 
     return corr
 
-
+@print_execute_time
 def regression_evaluation_pairs(y_true, y_pred):
     """
     :param y_true: 若干条真实序列组成的一个二维list或array或series，其中的每条真实序列必须是带索引的series，为了能对>0的数值的索引取交集；
@@ -734,7 +811,7 @@ def regression_evaluation_pairs(y_true, y_pred):
         SR.append(stats.spearmanr(a=y_true_trun[i], b=y_pred_trun[i])[0])
         KT.append(stats.kendalltau(x=y_true_trun[i], y=y_pred_trun[i])[0])
         WT.append(stats.weightedtau(x=y_true_trun[i], y=y_pred_trun[i])[0])
-        MGC.append(stats.multiscale_graphcorr(x=np.array(y_true_trun[i]), y=np.array(y_pred_trun[i]), reps=0, workers=-1)[0])  # hardly affected by abnormal scatters (i.e. outliers); x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
+        MGC.append(stats.multiscale_graphcorr(x=np.array(y_true_trun[i]), y=np.array(y_pred_trun[i]), reps=0, workers=1, random_state=1)[0])  # hardly affected by abnormal scatters (i.e. outliers); x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
 
     print('判断前的真实（及预测）序列对数:', len(y_true), '  判断后的真实（及预测）序列对数:', len(y_true_trun), '\n')
     print('原始的评估指标：')
@@ -861,7 +938,7 @@ def regression_evaluation_single(y_true, y_pred):
     SR = stats.spearmanr(a=y_true_trun, b=y_pred_trun)[0]
     KT = stats.kendalltau(x=y_true_trun, y=y_pred_trun)[0]
     WT = stats.weightedtau(x=y_true_trun, y=y_pred_trun)[0]
-    MGC = stats.multiscale_graphcorr(x=np.array(y_true_trun), y=np.array(y_pred_trun), reps=0, workers=-1)[0]  # hardly affected by abnormal scatters (i.e. outliers); x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
+    MGC = stats.multiscale_graphcorr(x=np.array(y_true_trun), y=np.array(y_pred_trun), reps=0, workers=1, random_state=1)[0]  # hardly affected by abnormal scatters (i.e. outliers); x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
 
     print('判断前的真实（及预测）序列对数:', len(y_true), '  判断后的真实（及预测）序列对数:', len(y_true_trun), '\n')
     print('原始的评估指标：')
@@ -874,31 +951,31 @@ def regression_evaluation_single(y_true, y_pred):
     return MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MALE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE, VAR, R2, PR, SR, KT, WT, MGC, y_true_trun, y_pred_trun
 
 
-results_v1_all = regression_accuracy_pairs(y_true=y_input_mul_actual[:], y_pred=y_input_mul_pred[:])
-results_v1 = pd.DataFrame(results_v1_all[:-2], index=['precision',
-                                           'MAPE', 'SMAPE', 'RMSPE', 'MTD_p2',
-                                           'EMLAE', 'MALE', 'MAE', 'RMSE', 'MedAE', 'MTD_p1',
-                                           'MSE', 'MSLE'])
-print('指标个数：', len(results_v1))
-print(results_v1, '\n')
-
-results_v2_all = regression_accuracy_single(y_true=y_input_mul_actual[0], y_pred=y_input_mul_pred[0])
-results_v2 = pd.DataFrame(results_v2_all[:-2],
-                          index=[
-                                'MAPE', 'SMAPE', 'RMSPE', 'MTD_p2',
-                                'EMLAE', 'MALE', 'MAE', 'RMSE', 'MedAE', 'MTD_p1',
-                                'MSE', 'MSLE'])
-print('指标个数：', len(results_v2))
-print(results_v2, '\n')
+# results_v1_all = regression_accuracy_pairs(y_true=y_input_mul_actual[:], y_pred=y_input_mul_pred[:])
+# results_v1 = pd.DataFrame(results_v1_all[:-2], index=['precision',
+#                                            'MAPE', 'SMAPE', 'RMSPE', 'MTD_p2',
+#                                            'EMLAE', 'MALE', 'MAE', 'RMSE', 'MedAE', 'MTD_p1',
+#                                            'MSE', 'MSLE'])
+# print('指标个数：', len(results_v1))
+# print(results_v1, '\n')
 #
+# results_v2_all = regression_accuracy_single(y_true=y_input_mul_actual[-1], y_pred=y_input_mul_pred[-1])
+# results_v2 = pd.DataFrame(results_v2_all[:-2],
+#                           index=[
+#                                 'MAPE', 'SMAPE', 'RMSPE', 'MTD_p2',
+#                                 'EMLAE', 'MALE', 'MAE', 'RMSE', 'MedAE', 'MTD_p1',
+#                                 'MSE', 'MSLE'])
+# print('指标个数：', len(results_v2))
+# print(results_v2, '\n')
+# #
 results_v3_all = regression_correlaiton_pairs(y_true=y_input_mul_actual[:], y_pred=y_input_mul_pred[:])
 print('指标个数：', len(results_v3_all[0].columns))
 print('序列对的最终相关性指标（越接近1正相关性越强，越接近-1负相关性越强，越接近0相关性越弱）（未归一化）:', '\n', results_v3_all[0], '\n')
-#
-results_v4_all = regression_correlaiton_single(y_true=y_input_mul_actual[0], y_pred=y_input_mul_pred[0])
-print('指标个数：', len(results_v4_all[0].columns))
-print('序列对的最终相关性指标（越接近1正相关性越强，越接近-1负相关性越强，越接近0相关性越弱）（未归一化）:', '\n', results_v4_all[0], '\n')
-#
+# #
+# results_v4_all = regression_correlaiton_single(y_true=y_input_mul_actual[-1], y_pred=y_input_mul_pred[-1], type='high')
+# print('指标个数：', len(results_v4_all[0].columns))
+# print('序列对的最终相关性指标（越接近1正相关性越强，越接近-1负相关性越强，越接近0相关性越弱）（未归一化）:', '\n', results_v4_all[0], '\n')
+# #
 results_v5_all = regression_evaluation_pairs(y_true=y_input_mul_actual[:], y_pred=y_input_mul_pred[:])
 results_v5 = pd.DataFrame(results_v5_all[:-2], index=['evaluation',
                                            'MAPE', 'SMAPE', 'RMSPE', 'MTD_p2',
@@ -907,16 +984,16 @@ results_v5 = pd.DataFrame(results_v5_all[:-2], index=['evaluation',
                                            'VAR', 'R2', 'PR', 'SR', 'KT', 'WT', 'MGC'])
 print('指标个数：', len(results_v5))
 print(results_v5, '\n')
-#
-results_v6_all = regression_evaluation_single(y_true=y_input_mul_actual[0], y_pred=y_input_mul_pred[0])
-results_v6 = pd.DataFrame(results_v6_all[:-2], index=[
-                                           'MAPE', 'SMAPE', 'RMSPE', 'MTD_p2',
-                                           'EMLAE', 'MALE', 'MAE', 'RMSE', 'MedAE', 'MTD_p1',
-                                           'MSE', 'MSLE',
-                                           'VAR', 'R2', 'PR', 'SR', 'KT', 'WT', 'MGC'])
-print('指标个数：', len(results_v6))
-print(results_v6, '\n')
-#
+# #
+# results_v6_all = regression_evaluation_single(y_true=y_input_mul_actual[-1], y_pred=y_input_mul_pred[-1])
+# results_v6 = pd.DataFrame(results_v6_all[:-2], index=[
+#                                            'MAPE', 'SMAPE', 'RMSPE', 'MTD_p2',
+#                                            'EMLAE', 'MALE', 'MAE', 'RMSE', 'MedAE', 'MTD_p1',
+#                                            'MSE', 'MSLE',
+#                                            'VAR', 'R2', 'PR', 'SR', 'KT', 'WT', 'MGC'])
+# print('指标个数：', len(results_v6))
+# print(results_v6, '\n')
+# #
 results_v7 = correlation_population(pop1=y_input_mul_actual[:], pop2=y_input_mul_pred[:])
 print('\n''两组ndarray的综合相关性：', results_v7[0], '\n', 'p-values:', results_v7[1], '\n')
 
