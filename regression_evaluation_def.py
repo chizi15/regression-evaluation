@@ -1,3 +1,23 @@
+"""
+预测结果评价函数的使用方法:
+1. 评价种类、品类群、课别、企业、全体层级的结果时，将企业种类的各对预测金额及理论销售金额传入函数，而不是将各汇总层级的序列对输入函数，避免低层级的偏差信息因正负号不同而消失；
+评价单品、品种层级的结果时，将企业单品的各对预测销量及理论销量传入函数。不用单品评价结果去计算种类及更高层级的精度，是因为预测系统算法设计的优化目标是企业种类预测金额，而不是直接优化单品预测销量。
+2. 当同一目标有三种序列时：预测2.0、预测1.0、实际销售，应把预测2.0和实际销售、预测1.0和实际销售分别传入函数regression_evaluation，
+来评价预测2.0贴近实际销售的程度、预测1.0贴近实际销售的程度。当要评价预测2.0和预测1.0的偏离程度时，应把从regression_evaluation得到的两种值，再传入函数smape得到偏离程度。
+因为smape是所有指标里唯一具有无偏性的百分比指标，不是以某一种序列为目标，评价另一种序列趋近该种序列的程度；所以不应把预测2.0和预测1.0传入regression_evaluation直接得到偏离程度。
+也不能将预测2.0与预测1.0拼到一起，与理论销售作为一个整体的序列对传入regression_evaluation，因为两种预测结果是由两种不同模型得到的，若拼到一起，
+在后续归一化时会相互影响，进而也会影响其后的加权平均，从而不能对每种模型的预测结果得到准确的相互独立的评价结果。
+3. 除了最终指标precision是最重要的评价指标外，如果更关心平时的预测结果，参考MAPE更好；如果更关心节假日期间的预测结果，参考RMSE(eval_measures.rmse)更好。
+4. 若要评价某个具体的企业种类的预测结果，不能将这个序列对输入regression_evaluation，可以输入分项函数中的任意一个；
+若要评价某个种类的预测结果，则将各个企业种类的预测序列和真实序列组成的序列对传入regression_evaluation，对返回结果按序列求平均，得到该种类的预测评价结果；
+此时序列对中的y_true根据企业的不同而不同；而不是将该种类的汇总序列对传入regression_evaluation。若要对某个具体的企业单品、某个单品的预测结果进行评价，与4中方法类似。
+5. 若要评价某个企业品类群的预测结果，则将该企业品类群下所有企业种类序列对传入regression_evaluation，对返回结果按序列求平均，此时序列对中的y_true是不同的，因为是不同的企业种类的理论销售；
+而不是将该品类群的汇总序列对传入regression_evaluation。若要对某个企业课别、某个企业、全体的预测结果进行评价，与5中方法类似；
+若要对某个企业品种、某个品种的预测结果进行评价，也与5中方法类似，只是传入regression_evaluation的是由企业单品构成的序列对。
+6. 若要评价（优选）不同算法模型或不同中间计算结果对同一企业种类的预测结果，则传入regression_evaluation的序列对中y_true是相同的，因为是同一企业种类的理论销售。
+7. 综上，可完成对任一层级、每个层级下任一子集的准确评价。
+"""
+
 import pandas as pd
 import numpy as np
 from sklearn import metrics
@@ -64,7 +84,7 @@ def s_curve_interp(n, x=(1, 10, 20, 30), y=(1e-5, 0.1, 0.9, 1)):
     return float(r)
 
 
-def dyn_seri_weighted(seri, type=None, w=None, initial=1, r=2, d=1, low=0, up=1, critical_y=(1e-5, 0.1, 0.9, 1)):
+def dyn_seri_weighted(seri, type=None, w=None, initial=1, r=2, d=1, low=0, up=1, critical_y=(1e-10, 0.15, 0.5, 1)):
     """
     :param seri: 需要进行加权平均变成一个值的一维数组，可以是series,array,list,tuple；在调用不同type时需注意可能有不同的顺序。
     :param type: 选择序列seri加权的类型，'amean_geo', 'amean_arith', 'amean_trim', 'amean_sigmoid', 'gmean', 'hmean',
@@ -114,15 +134,19 @@ def dyn_seri_weighted(seri, type=None, w=None, initial=1, r=2, d=1, low=0, up=1,
         seri.sort()
         return stats.tmean(seri, (seri[low], seri[-up]), inclusive=(True, True))
     elif type == 'amean_sigmoid':  # 权重从左至右呈S型升高，即加权结果不太受左侧点的影响，而受右侧点影响比较大
-        # 用于构造函数的坐标点
-        critical_x = (1, len(seri) / 3, len(seri) * 2 / 3, len(seri))  # 将x轴上的定义域分为均等的三段
-        critical_y = critical_y
-        xnew = np.arange(critical_x[0], critical_x[-1] + 1, 1)  # 设置每个需要计算权重的x坐标
-        ynew = [s_curve_interp(i, x=critical_x, y=critical_y) for i in xnew]  # 计算这些x坐标在S曲线上对应的y值
-        # 根据构造的函数生成归一化的权重w。因为每个w的分子与构造曲线的每个y值完全相同，而每个w的分母都是sum(ynew)，
-        # 所以w的分布完全由其分子确定，而其分子的分布与构造曲线y值的分布相同，所以w的分布特征与构造曲线的分布特征完全相同。
-        w = [i / sum(ynew) for i in ynew]
-        return np.dot(np.array(seri), w)
+        if len(seri)<4:
+            # if length of series < 4, use equal weights, i.e. simple algorithem average
+            return np.dot(np.array(seri), w)
+        else:
+            # 用于构造函数的坐标点
+            critical_x = (1, len(seri) / 3, len(seri) * 2 / 3, len(seri))  # 将x轴上的定义域分为均等的三段
+            critical_y = critical_y
+            xnew = np.arange(critical_x[0], critical_x[-1] + 1, 1)  # 设置每个需要计算权重的x坐标
+            ynew = [s_curve_interp(i, x=critical_x, y=critical_y) for i in xnew]  # 计算这些x坐标在S曲线上对应的y值
+            # 根据构造的函数生成归一化的权重w。因为每个w的分子与构造曲线的每个y值完全相同，而每个w的分母都是sum(ynew)，
+            # 所以w的分布完全由其分子确定，而其分子的分布与构造曲线y值的分布相同，所以w的分布特征与构造曲线的分布特征完全相同。
+            w = [i / sum(ynew) for i in ynew]
+            return np.dot(np.array(seri), w)
     elif type == 'gmean':
         return stats.gmean(seri, weights=w)  # simple geometric average, or weighted geometric average
     elif type == 'hmean':
@@ -269,7 +293,9 @@ def regression_accuracy_pairs(y_true, y_pred):
     """
     :param y_true: 若干条真实序列组成的一个二维list或array或series，其中的每条真实序列必须是带索引的series，为了能对>0的数值的索引取交集；并与y_pred中的预测序列按顺序一一对应
     :param y_pred: 若干条预测序列组成的一个二维list或array或series，其中的每条预测序列必须是带索引的series，为了能对>0的数值的索引取交集；并与y_true中的真实序列按顺序一一对应
-    :return: 精度指标，按顺序分别是：最终精度指标，MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE
+    :return: 精度指标，按顺序分别是：最终精度指标(precision)，MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE
+
+    特别注意：在返回的指标中，
 
     测试几种常用的评价序列对的精度指标
     原则：1.带平方项的指标会放大在正负1之外的残差的影响，而压缩在正负1之内的残差的影响，由于各指标越接近零越好，则会惩罚正负1之外的残差，偏离正负1越远，越受到惩罚；而奖励正负1之内的残差。
@@ -291,7 +317,7 @@ def regression_accuracy_pairs(y_true, y_pred):
         else: continue
 
     if (len(y_true_trun) != len(y_pred_trun)) or (len(y_true_trun) < 2):
-        raise Exception('y_true_trun与y_pred_trun中序列条数必须相等且≥2')  # 若序列对的数目小于2，则数值变换后的指标均为1
+        raise Exception('y_true_trun与y_pred_trun中序列条数必须相等且≥2')  # 因为若序列对的数目小于2，则数值变换后的指标均为1，就起不到指标评估的作用了。
 
     for i in range(len(y_true_trun)):
         # 第一组，零次的相对性指标：
@@ -313,7 +339,7 @@ def regression_accuracy_pairs(y_true, y_pred):
     # 将各序列对的若干精度指标整合成各序列对的最终单一评价指标；序列对的数目必须≥2，否则归一化后各指标值均为1。
     # 将各精度指标在各自维度内进行数值变换：1.对各指标除以其均值，将任意数量级的指标转化为在1上下波动的数值。
     # 2.再对抹平数量级后的指标取幂函数，进一步缩小指标内数值的差距，保留代表优劣的方向性即可；原始指标内数值差异越大，所开次方根数越大，反之越小，可以避免指标间离群值的出现。
-    # 3.再对list作归一化，将所有结果都转化为(0,1)之间的数，越趋近0越好，代表预测列越趋近真实序列；最终精度presion经过有偏向的加权后，也是(0,1)之间的数值。
+    # 3.再对list作归一化，将所有结果都转化为(0,1)之间的数，越趋近0越好，代表预测列越趋近真实序列；最终精度presion经过有偏向的加权后，也是(0,1)之间的经归一化后的数值。
     MAPE_1 = (MAPE / np.mean(MAPE)) / sum(MAPE / np.mean(MAPE))
     SMAPE_1 = (SMAPE / np.mean(SMAPE)) / sum(SMAPE / np.mean(SMAPE))
     RMSPE_1 = (RMSPE / np.mean(RMSPE)) / sum(RMSPE / np.mean(RMSPE))
@@ -344,7 +370,7 @@ def regression_accuracy_single(y_true, y_pred):
     """
     :param y_true: 一条真实序列，带索引的series，为了能对>0的数值的索引取交集；并与y_pred中的预测序列按顺序一一对应
     :param y_pred: 一条预测序列，带索引的series，为了能对>0的数值的索引取交集；并与y_true中的真实序列按顺序一一对应
-    :return: 精度指标，按顺序分别是：MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE
+    :return: 精度指标，按顺序分别是：MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE，越接近0越好
 
     测试几种常用的评价序列对的精度指标
     原则：1.带平方项的指标会放大在正负1之外的残差的影响，而压缩在正负1之内的残差的影响，由于各指标越接近零越好，则会惩罚正负1之外的残差，偏离正负1越远，越受到惩罚；而奖励正负1之内的残差。
@@ -386,7 +412,7 @@ def regression_correlaiton_pairs(y_true, y_pred):
     :param y_true: 若干条真实序列组成的一个二维list或array或series；并与y_pred中的预测序列按顺序一一对应；y_true是历史上进模型之前的可能经过处理的真实值。
     :param y_pred: 若干条预测序列组成的一个二维list或array或series；并与y_true中的真实序列按顺序一一对应；y_pred是历史上该模型输出的预测值，或者经过补偿的预测值，总之是最终用于订货的预测值。
     y_true，y_pred也可以是需要进行相关性计算的多组序列对，其中每条序列中的元素个数是每个样本的特征数
-    :return: 各个相关性指标，按顺序分别是：综合相关性指标，PR, SR, KT, WT, MGC
+    :return: 各个相关性指标，按顺序分别是：综合相关性指标(correlation)，PR, SR, KT, WT, MGC，越接近1越好
     """
 
     PR, SR, KT, WT, MGC = [], [], [], [], []  # 原始相关性指标
@@ -459,7 +485,7 @@ def regression_correlaiton_single(y_true, y_pred, type='high'):
     :param y_pred: 一条预测序列，并与真实序列按顺序一一对应；y_pred是历史上该模型输出的预测值，或者经过补偿的预测值，总之是最终用于订货的预测值。
     y_true，y_pred也可以是需要进行相关性计算的多组序列对，其中每条序列中的元素个数是每个样本的特征数
     :type: 'high' includes MGC, which is the best but time costs, however, 'low' does not include.
-    :return: 各个相关性指标，按顺序分别是：综合相关性指标，PR, SR, KT, WT, MGC(type='high')
+    :return: 各个相关性指标，按顺序分别是：综合相关性指标(correlation)，PR, SR, KT, WT, MGC(type='high')，越接近1越好。
     """
 
     y_true_trun, y_pred_trun = np.array(y_true), np.array(y_pred)
@@ -574,7 +600,11 @@ def regression_evaluation_pairs(y_true, y_pred):
     并与y_pred中的预测序列按顺序一一对应；y_true是历史上进模型之前的可能经过处理的真实值。
     :param y_pred: 若干条预测序列组成的一个二维list或array或series，其中的每条预测序列必须是带索引的series，为了能对>0的数值的索引取交集；
     并与y_true中的真实序列按顺序一一对应；y_pred是历史上该模型输出的预测值，或者经过补偿的预测值，总之是最终用于订货的预测值。
-    :return: 精度指标，按顺序分别是：最终精度指标，MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE, VAR
+    :return: 精度指标，按顺序分别是：最终精度指标(evaluation), MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MALE, MAE, RMSE, MedAE,
+    MTD_p1, MSE, MSLE, VAR, R2, PR, SR, KT, WT, MGC
+
+    特别注意，返回的值中，evaluation(变换后的指标加权所得), MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MALE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE(这些是变换前的原始指标)，是越接近0越好；
+    VAR, R2, PR, SR, KT, WT, MGC(这些是变换前的原始指标)，是越接近1越好。
 
     测试几种常用的评价序列对的精度指标
     原则：1.带平方项的指标会放大在正负1之外的残差的影响，而压缩在正负1之内的残差的影响，由于各指标越接近零越好，则会惩罚正负1之外的残差，偏离正负1越远，越受到惩罚；而奖励正负1之内的残差。
@@ -682,7 +712,11 @@ def regression_evaluation_single(y_true, y_pred):
     并与y_pred中的预测序列按顺序一一对应；y_true是历史上进模型之前的可能经过处理的真实值。
     :param y_pred: 若干条预测序列组成的一个二维list或array或series，其中的每条预测序列必须是带索引的series，为了能对>0的数值的索引取交集；
     并与y_true中的真实序列按顺序一一对应；y_pred是历史上该模型输出的预测值，或者经过补偿的预测值，总之是最终用于订货的预测值。
-    :return: 精度指标，按顺序分别是：最终精度指标，MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE, VAR
+    :return: 精度指标，按顺序分别是：最终精度指标(evaluation), MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MALE, MAE, RMSE, MedAE,
+    MTD_p1, MSE, MSLE, VAR, R2, PR, SR, KT, WT, MGC
+
+    特别注意，返回的值中，evaluation(变换后的指标加权所得), MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MALE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE(这些是变换前的原始指标)，是越接近0越好；
+    VAR, R2, PR, SR, KT, WT, MGC(这些是变换前的原始指标)，是越接近1越好。
 
     测试几种常用的评价序列对的精度指标
     原则：1.带平方项的指标会放大在正负1之外的残差的影响，而压缩在正负1之内的残差的影响，由于各指标越接近零越好，则会惩罚正负1之外的残差，偏离正负1越远，越受到惩罚；而奖励正负1之内的残差。
@@ -729,3 +763,12 @@ def regression_evaluation_single(y_true, y_pred):
 
     # 无法得出最终precision，因为各指标的结果数量级不同，又没有其他序列对得出的指标结果作归一化消除数量级的影响
     return MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MALE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE, VAR, R2, PR, SR, KT, WT, MGC, y_true_trun, y_pred_trun
+
+
+results = np.array([0.1,0.2,0.3,0.4])
+# w1相反数权重，当results中元素个数为2时，生成的w1为对称关系，指标0.4:0.6变为权重0.6:0.4；当元素个数增加时，权重间的比例会被压缩，这对于指标到权重的变换是有益的。
+w1 = (results.sum()-results) / (results.sum()-results).sum()
+print('w:', w1, '\n', sum(w1))
+# w2倒数权重，在整个定义域内指标和权重都是对称关系，例如指标为[0.1,0.2,0.3,0.4]，则权重为对称的[0.48,0.24,0.16,0.12]，但指标的倍数关系会大于趋近程度的倍数关系，所以是更极端的。
+w2 = (results.sum() / results) / (results.sum() / results).sum()
+print('w:', w2, '\n', sum(w2))
