@@ -1,3 +1,23 @@
+"""
+预测结果评价函数的使用方法:
+1. 评价种类、品类群、课别、企业、全体层级的结果时，将企业种类的各对预测金额及理论销售金额传入函数，而不是将各汇总层级的序列对输入函数，避免低层级的偏差信息因正负号不同而消失；
+评价单品、品种层级的结果时，将企业单品的各对预测销量及理论销量传入函数。不用单品评价结果去计算种类及更高层级的精度，是因为预测系统算法设计的优化目标是企业种类预测金额，而不是直接优化单品预测销量。
+2. 当同一目标有三种序列时：预测2.0、预测1.0、实际销售，应把预测2.0和实际销售、预测1.0和实际销售分别传入函数regression_evaluation，
+来评价预测2.0贴近实际销售的程度、预测1.0贴近实际销售的程度。当要评价预测2.0和预测1.0的偏离程度时，应把从regression_evaluation得到的两种值，再传入函数smape得到偏离程度。
+因为smape是所有指标里唯一具有无偏性的百分比指标，不是以某一种序列为目标，评价另一种序列趋近该种序列的程度；所以不应把预测2.0和预测1.0传入regression_evaluation直接得到偏离程度。
+也不能将预测2.0与预测1.0拼到一起，与理论销售作为一个整体的序列对传入regression_evaluation，因为两种预测结果是由两种不同模型得到的，若拼到一起，
+在后续归一化时会相互影响，进而也会影响其后的加权平均，从而不能对每种模型的预测结果得到准确的相互独立的评价结果。
+3. 除了最终指标precision是最重要的评价指标外，如果更关心平时的预测结果，参考MAPE更好；如果更关心节假日期间的预测结果，参考RMSE(eval_measures.rmse)更好。
+4. 若要评价某个具体的企业种类的预测结果，不能将这个序列对输入regression_evaluation，可以输入分项函数中的任意一个；
+若要评价某个种类的预测结果，则将各个企业种类的预测序列和真实序列组成的序列对传入regression_evaluation，对返回结果按序列求平均，得到该种类的预测评价结果；
+此时序列对中的y_true根据企业的不同而不同；而不是将该种类的汇总序列对传入regression_evaluation。若要对某个具体的企业单品、某个单品的预测结果进行评价，与4中方法类似。
+5. 若要评价某个企业品类群的预测结果，则将该企业品类群下所有企业种类序列对传入regression_evaluation，对返回结果按序列求平均，此时序列对中的y_true是不同的，因为是不同的企业种类的理论销售；
+而不是将该品类群的汇总序列对传入regression_evaluation。若要对某个企业课别、某个企业、全体的预测结果进行评价，与5中方法类似；
+若要对某个企业品种、某个品种的预测结果进行评价，也与5中方法类似，只是传入regression_evaluation的是由企业单品构成的序列对。
+6. 若要评价（优选）不同算法模型或不同中间计算结果对同一企业种类的预测结果，则传入regression_evaluation的序列对中y_true是相同的，因为是同一企业种类的理论销售。
+7. 综上，可完成对任一层级、每个层级下任一子集的准确评价。
+"""
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -156,7 +176,7 @@ def s_curve_interp(n, x=(1, 10, 20, 30), y=(1e-5, 0.1, 0.9, 1)):
     return float(r)
 
 
-def dyn_seri_weighted(seri, type=None, w=None, initial=1, r=2, d=1, low=0, up=1, critical_y=(1e-5, 0.1, 0.9, 1)):
+def dyn_seri_weighted(seri, type=None, w=None, initial=1, r=2, d=1, low=0, up=1, critical_y=(1e-10, 0.15, 0.5, 1)):
     """
     :param seri: 需要进行加权平均变成一个值的一维数组，可以是series,array,list,tuple；在调用不同type时需注意可能有不同的顺序。
     :param type: 选择序列seri加权的类型，'amean_geo', 'amean_arith', 'amean_trim', 'amean_sigmoid', 'gmean', 'hmean',
@@ -206,15 +226,19 @@ def dyn_seri_weighted(seri, type=None, w=None, initial=1, r=2, d=1, low=0, up=1,
         seri.sort()
         return stats.tmean(seri, (seri[low], seri[-up]), inclusive=(True, True))
     elif type == 'amean_sigmoid':  # 权重从左至右呈S型升高，即加权结果不太受左侧点的影响，而受右侧点影响比较大
-        # 用于构造函数的坐标点
-        critical_x = (1, len(seri) / 3, len(seri) * 2 / 3, len(seri))  # 将x轴上的定义域分为均等的三段
-        critical_y = critical_y
-        xnew = np.arange(critical_x[0], critical_x[-1] + 1, 1)  # 设置每个需要计算权重的x坐标
-        ynew = [s_curve_interp(i, x=critical_x, y=critical_y) for i in xnew]  # 计算这些x坐标在S曲线上对应的y值
-        # 根据构造的函数生成归一化的权重w。因为每个w的分子与构造曲线的每个y值完全相同，而每个w的分母都是sum(ynew)，
-        # 所以w的分布完全由其分子确定，而其分子的分布与构造曲线y值的分布相同，所以w的分布特征与构造曲线的分布特征完全相同。
-        w = [i / sum(ynew) for i in ynew]
-        return np.dot(np.array(seri), w)
+        if len(seri)<4:
+            # if length of series < 4, use equal weights, i.e. simple algorithem average
+            return np.dot(np.array(seri), w)
+        else:
+            # 用于构造函数的坐标点
+            critical_x = (1, len(seri) / 3, len(seri) * 2 / 3, len(seri))  # 将x轴上的定义域分为均等的三段
+            critical_y = critical_y
+            xnew = np.arange(critical_x[0], critical_x[-1] + 1, 1)  # 设置每个需要计算权重的x坐标
+            ynew = [s_curve_interp(i, x=critical_x, y=critical_y) for i in xnew]  # 计算这些x坐标在S曲线上对应的y值
+            # 根据构造的函数生成归一化的权重w。因为每个w的分子与构造曲线的每个y值完全相同，而每个w的分母都是sum(ynew)，
+            # 所以w的分布完全由其分子确定，而其分子的分布与构造曲线y值的分布相同，所以w的分布特征与构造曲线的分布特征完全相同。
+            w = [i / sum(ynew) for i in ynew]
+            return np.dot(np.array(seri), w)
     elif type == 'gmean':
         return stats.gmean(seri, weights=w)  # simple geometric average, or weighted geometric average
     elif type == 'hmean':
@@ -931,31 +955,31 @@ def regression_evaluation_single(y_true, y_pred):
     return MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MALE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE, VAR, R2, PR, SR, KT, WT, MGC, y_true_trun, y_pred_trun
 
 
-# results_v1_all = regression_accuracy_pairs(y_true=y_input_mul_actual[:], y_pred=y_input_mul_pred[:])
-# results_v1 = pd.DataFrame(results_v1_all[:-2], index=['precision',
-#                                            'MAPE', 'SMAPE', 'RMSPE', 'MTD_p2',
-#                                            'EMLAE', 'MALE', 'MAE', 'RMSE', 'MedAE', 'MTD_p1',
-#                                            'MSE', 'MSLE'])
-# print('指标个数：', len(results_v1))
-# print(results_v1, '\n')
+results_v1_all = regression_accuracy_pairs(y_true=y_input_mul_actual[:], y_pred=y_input_mul_pred[:])
+results_v1 = pd.DataFrame(results_v1_all[:-2], index=['precision',
+                                           'MAPE', 'SMAPE', 'RMSPE', 'MTD_p2',
+                                           'EMLAE', 'MALE', 'MAE', 'RMSE', 'MedAE', 'MTD_p1',
+                                           'MSE', 'MSLE'])
+print('指标个数：', len(results_v1))
+print(results_v1, '\n')
+
+results_v2_all = regression_accuracy_single(y_true=y_input_mul_actual[-1], y_pred=y_input_mul_pred[-1])
+results_v2 = pd.DataFrame(results_v2_all[:-2],
+                          index=[
+                                'MAPE', 'SMAPE', 'RMSPE', 'MTD_p2',
+                                'EMLAE', 'MALE', 'MAE', 'RMSE', 'MedAE', 'MTD_p1',
+                                'MSE', 'MSLE'])
+print('指标个数：', len(results_v2))
+print(results_v2, '\n')
 #
-# results_v2_all = regression_accuracy_single(y_true=y_input_mul_actual[-1], y_pred=y_input_mul_pred[-1])
-# results_v2 = pd.DataFrame(results_v2_all[:-2],
-#                           index=[
-#                                 'MAPE', 'SMAPE', 'RMSPE', 'MTD_p2',
-#                                 'EMLAE', 'MALE', 'MAE', 'RMSE', 'MedAE', 'MTD_p1',
-#                                 'MSE', 'MSLE'])
-# print('指标个数：', len(results_v2))
-# print(results_v2, '\n')
-# #
 results_v3_all = regression_correlaiton_pairs(y_true=y_input_mul_actual[:], y_pred=y_input_mul_pred[:])
 print('指标个数：', len(results_v3_all[0].columns))
 print('序列对的最终相关性指标（越接近1正相关性越强，越接近-1负相关性越强，越接近0相关性越弱）（未归一化）:', '\n', results_v3_all[0], '\n')
-# #
-# results_v4_all = regression_correlaiton_single(y_true=y_input_mul_actual[-1], y_pred=y_input_mul_pred[-1], type='high')
-# print('指标个数：', len(results_v4_all[0].columns))
-# print('序列对的最终相关性指标（越接近1正相关性越强，越接近-1负相关性越强，越接近0相关性越弱）（未归一化）:', '\n', results_v4_all[0], '\n')
-# #
+#
+results_v4_all = regression_correlaiton_single(y_true=y_input_mul_actual[-1], y_pred=y_input_mul_pred[-1], type='high')
+print('指标个数：', len(results_v4_all[0].columns))
+print('序列对的最终相关性指标（越接近1正相关性越强，越接近-1负相关性越强，越接近0相关性越弱）（未归一化）:', '\n', results_v4_all[0], '\n')
+#
 results_v5_all = regression_evaluation_pairs(y_true=y_input_mul_actual[:], y_pred=y_input_mul_pred[:])
 results_v5 = pd.DataFrame(results_v5_all[:-2], index=['evaluation',
                                            'MAPE', 'SMAPE', 'RMSPE', 'MTD_p2',
@@ -964,16 +988,16 @@ results_v5 = pd.DataFrame(results_v5_all[:-2], index=['evaluation',
                                            'VAR', 'R2', 'PR', 'SR', 'KT', 'WT', 'MGC'])
 print('指标个数：', len(results_v5))
 print(results_v5, '\n')
-# #
-# results_v6_all = regression_evaluation_single(y_true=y_input_mul_actual[-1], y_pred=y_input_mul_pred[-1])
-# results_v6 = pd.DataFrame(results_v6_all[:-2], index=[
-#                                            'MAPE', 'SMAPE', 'RMSPE', 'MTD_p2',
-#                                            'EMLAE', 'MALE', 'MAE', 'RMSE', 'MedAE', 'MTD_p1',
-#                                            'MSE', 'MSLE',
-#                                            'VAR', 'R2', 'PR', 'SR', 'KT', 'WT', 'MGC'])
-# print('指标个数：', len(results_v6))
-# print(results_v6, '\n')
-# #
+#
+results_v6_all = regression_evaluation_single(y_true=y_input_mul_actual[-1], y_pred=y_input_mul_pred[-1])
+results_v6 = pd.DataFrame(results_v6_all[:-2], index=[
+                                           'MAPE', 'SMAPE', 'RMSPE', 'MTD_p2',
+                                           'EMLAE', 'MALE', 'MAE', 'RMSE', 'MedAE', 'MTD_p1',
+                                           'MSE', 'MSLE',
+                                           'VAR', 'R2', 'PR', 'SR', 'KT', 'WT', 'MGC'])
+print('指标个数：', len(results_v6))
+print(results_v6, '\n')
+#
 results_v7 = correlation_population(pop1=y_input_mul_actual[:], pop2=y_input_mul_pred[:])
 print('\n''两组ndarray的综合相关性：', results_v7[0], '\n', 'p-values:', results_v7[1], '\n')
 
@@ -981,8 +1005,12 @@ print('\n''两组ndarray的综合相关性：', results_v7[0], '\n', 'p-values:'
 # 将评估函数结果用于动态加权的使用方法：
 # 使用步骤：1.将每个门店单品，两种模型的一段历史区间，预测序列和真实序列的两组序列对，输入regression_evaluation，得到两个评估指标；
 # 2.对这两个指标进行如下操作，得到每个门店单品的两个模型在下一个月所要采用的权重w；
-w = (1-results_v5.loc['evaluation']) / (1-results_v5.loc['evaluation']).sum()
-print('w:', w, '\n', sum(w))
+# w1相反数权重，当results_v5.loc['evaluation']中元素个数为2时，生成的w1为对称关系，指标0.4:0.6变为权重0.6:0.4；当元素个数增加时，权重间的比例会被压缩，这对于指标到权重的变换是有益的。
+w1 = (results_v5.loc['evaluation'].sum()-results_v5.loc['evaluation']) / (results_v5.loc['evaluation'].sum()-results_v5.loc['evaluation']).sum()
+print('w:', w1, '\n', sum(w1))
+# w2倒数权重，在整个定义域内指标和权重都是对称关系，例如指标为[0.1,0.2,0.3,0.4]，则权重为对称的[0.48,0.24,0.16,0.12]，但指标的倍数关系会大于趋近程度的倍数关系，所以是更极端的。
+w2 = (results_v5.loc['evaluation'].sum() / results_v5.loc['evaluation']) / (results_v5.loc['evaluation'].sum() / results_v5.loc['evaluation']).sum()
+print('w:', w2, '\n', sum(w2))
 # 因为regression_evaluation返回的最终评估指标precision是(0,1)之间的值，越趋近0则模型预测结果越好，所以需要使用一个递减函数对precision做变换，才能得到真正能使用的权重。
 # 这里采用y=1-x，而不用y=1/x，可以避免当x较小时，1/x被放大过多，且一点微小的扰动都会对1/x产生较大影响的不利效应。
 # 3.预测下一个月的新数据时，将每个门店单品两个模型的预测序列和各自权重w输入dyn_df_weighted，得到一条预测序列，就是最终发布的预测值。
