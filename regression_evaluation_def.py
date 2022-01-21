@@ -1,3 +1,23 @@
+"""
+预测结果评价函数的使用方法:
+1. 评价种类、品类群、课别、企业、全体层级的结果时，将企业种类的各对预测金额及理论销售金额传入函数，而不是将各汇总层级的序列对输入函数，避免低层级的偏差信息因正负号不同而消失；
+评价单品、品种层级的结果时，将企业单品的各对预测销量及理论销量传入函数。不用单品评价结果去计算种类及更高层级的精度，是因为预测系统算法设计的优化目标是企业种类预测金额，而不是直接优化单品预测销量。
+2. 当同一目标有三种序列时：预测2.0、预测1.0、实际销售，应把预测2.0和实际销售、预测1.0和实际销售分别传入函数regression_evaluation，
+来评价预测2.0贴近实际销售的程度、预测1.0贴近实际销售的程度。当要评价预测2.0和预测1.0的偏离程度时，应把从regression_evaluation得到的两种值，再传入函数smape得到偏离程度。
+因为smape是所有指标里唯一具有无偏性的百分比指标，不是以某一种序列为目标，评价另一种序列趋近该种序列的程度；所以不应把预测2.0和预测1.0传入regression_evaluation直接得到偏离程度。
+也不能将预测2.0与预测1.0拼到一起，与理论销售作为一个整体的序列对传入regression_evaluation，因为两种预测结果是由两种不同模型得到的，若拼到一起，
+在后续归一化时会相互影响，进而也会影响其后的加权平均，从而不能对每种模型的预测结果得到准确的相互独立的评价结果。
+3. 除了最终指标precision是最重要的评价指标外，如果更关心平时的预测结果，参考MAPE更好；如果更关心节假日期间的预测结果，参考RMSE(eval_measures.rmse)更好。
+4. 若要评价某个具体的企业种类的预测结果，不能将这个序列对输入regression_evaluation，可以输入分项函数中的任意一个；
+若要评价某个种类的预测结果，则将各个企业种类的预测序列和真实序列组成的序列对传入regression_evaluation，对返回结果按序列求平均，得到该种类的预测评价结果；
+此时序列对中的y_true根据企业的不同而不同；而不是将该种类的汇总序列对传入regression_evaluation。若要对某个具体的企业单品、某个单品的预测结果进行评价，与4中方法类似。
+5. 若要评价某个企业品类群的预测结果，则将该企业品类群下所有企业种类序列对传入regression_evaluation，对返回结果按序列求平均，此时序列对中的y_true是不同的，因为是不同的企业种类的理论销售；
+而不是将该品类群的汇总序列对传入regression_evaluation。若要对某个企业课别、某个企业、全体的预测结果进行评价，与5中方法类似；
+若要对某个企业品种、某个品种的预测结果进行评价，也与5中方法类似，只是传入regression_evaluation的是由企业单品构成的序列对。
+6. 若要评价（优选）不同算法模型或不同中间计算结果对同一企业种类的预测结果，则传入regression_evaluation的序列对中y_true是相同的，因为是同一企业种类的理论销售。
+7. 综上，可完成对任一层级、每个层级下任一子集的准确评价。
+"""
+
 import pandas as pd
 import numpy as np
 from sklearn import metrics
@@ -392,7 +412,8 @@ def regression_correlaiton_pairs(y_true, y_pred):
     :param y_true: 若干条真实序列组成的一个二维list或array或series；并与y_pred中的预测序列按顺序一一对应；y_true是历史上进模型之前的可能经过处理的真实值。
     :param y_pred: 若干条预测序列组成的一个二维list或array或series；并与y_true中的真实序列按顺序一一对应；y_pred是历史上该模型输出的预测值，或者经过补偿的预测值，总之是最终用于订货的预测值。
     y_true，y_pred也可以是需要进行相关性计算的多组序列对，其中每条序列中的元素个数是每个样本的特征数
-    :return: 各个相关性指标，按顺序分别是：综合相关性指标(correlation)，PR, SR, KT, WT, MGC，越接近1越好
+    :return: 各个相关性指标，按顺序分别是：综合相关性指标(correlation)，PR, SR, KT, WT, MGC，越接近1越好.
+    PR,KT,WT需样本点数≥2，否则返回空；SR需样本点数≥3，否则返回空；MGC需样本点数≥5，否则返回空
     """
 
     PR, SR, KT, WT, MGC = [], [], [], [], []  # 原始相关性指标
@@ -466,6 +487,7 @@ def regression_correlaiton_single(y_true, y_pred, type='high'):
     y_true，y_pred也可以是需要进行相关性计算的多组序列对，其中每条序列中的元素个数是每个样本的特征数
     :type: 'high' includes MGC, which is the best but time costs, however, 'low' does not include.
     :return: 各个相关性指标，按顺序分别是：综合相关性指标(correlation)，PR, SR, KT, WT, MGC(type='high')，越接近1越好。
+    PR,KT,WT需样本点数≥2，否则返回空；SR需样本点数≥3，否则返回空；MGC需样本点数≥5，否则返回空
     """
 
     y_true_trun, y_pred_trun = np.array(y_true), np.array(y_pred)
@@ -520,14 +542,14 @@ def regression_correlaiton_single(y_true, y_pred, type='high'):
     if error != 'no' or type=='low' or (type=='high' and (len(y_true_trun) < 5 or len(y_pred_trun) < 5)):
         try:
             # PR当序列对在散点图中的斜率接近±1或0，各个点的斜率稍有变化时，容易识别为线性无关，此种情况应是较强的线性相关性；PR的特性表现为越趋近临界值（各点斜率趋近±1，0），鲁棒性越差
-            PR = stats.pearsonr(x=y_true_trun, y=y_pred_trun)
+            PR = stats.pearsonr(x=y_true_trun, y=y_pred_trun)  # PR需样本点数≥2，否则返回空
             PRmul = PR[0] * (1 - PR[1])
             # SR和PR有相似的上述鲁棒性问题，但鲁棒性稍好；KT和WT的鲁棒性也好于PR
-            SR = stats.spearmanr(a=y_true_trun, b=y_pred_trun)
+            SR = stats.spearmanr(a=y_true_trun, b=y_pred_trun)  # SR需样本点数≥3，否则返回空
             SRmul = SR[0] * (1 - SR[1])
-            KT = stats.kendalltau(x=y_true_trun, y=y_pred_trun)
+            KT = stats.kendalltau(x=y_true_trun, y=y_pred_trun)  # KT需样本点数≥2，否则返回空
             KTmul = KT[0] * (1 - KT[1])
-            WT = stats.weightedtau(x=y_true_trun, y=y_pred_trun)
+            WT = stats.weightedtau(x=y_true_trun, y=y_pred_trun)  # WT需样本点数≥2，否则返回空
             WTmul = WT[0] * 0.95  # suppose the p-value is 0.05
 
             # 对各个相关性指标考虑置信度：p-value越大，越不能拒绝原假设（序列对无关），备择假设（序列对相关）越不可信，则相关系数乘以越小的系数，则认为序列对的实际相关性，跟计算出的相关系数比，越低
@@ -581,7 +603,8 @@ def regression_evaluation_pairs(y_true, y_pred):
     :param y_pred: 若干条预测序列组成的一个二维list或array或series，其中的每条预测序列必须是带索引的series，为了能对>0的数值的索引取交集；
     并与y_true中的真实序列按顺序一一对应；y_pred是历史上该模型输出的预测值，或者经过补偿的预测值，总之是最终用于订货的预测值。
     :return: 精度指标，按顺序分别是：最终精度指标(evaluation), MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MALE, MAE, RMSE, MedAE,
-    MTD_p1, MSE, MSLE, VAR, R2, PR, SR, KT, WT, MGC
+    MTD_p1, MSE, MSLE, VAR, R2, PR, SR, KT, WT, MGC.
+    PR,KT,WT需样本点数≥2，否则返回空；SR需样本点数≥3，否则返回空；MGC需样本点数≥5，否则返回空.
 
     特别注意，返回的值中，evaluation(变换后的指标加权所得), MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MALE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE(这些是变换前的原始指标)，是越接近0越好；
     VAR, R2, PR, SR, KT, WT, MGC(这些是变换前的原始指标)，是越接近1越好。
@@ -694,6 +717,7 @@ def regression_evaluation_single(y_true, y_pred):
     并与y_true中的真实序列按顺序一一对应；y_pred是历史上该模型输出的预测值，或者经过补偿的预测值，总之是最终用于订货的预测值。
     :return: 精度指标，按顺序分别是：最终精度指标(evaluation), MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MALE, MAE, RMSE, MedAE,
     MTD_p1, MSE, MSLE, VAR, R2, PR, SR, KT, WT, MGC
+    PR,KT,WT需样本点数≥2，否则返回空；SR需样本点数≥3，否则返回空；MGC需样本点数≥5，否则返回空.
 
     特别注意，返回的值中，evaluation(变换后的指标加权所得), MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MALE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE(这些是变换前的原始指标)，是越接近0越好；
     VAR, R2, PR, SR, KT, WT, MGC(这些是变换前的原始指标)，是越接近1越好。
@@ -744,11 +768,11 @@ def regression_evaluation_single(y_true, y_pred):
     # 无法得出最终precision，因为各指标的结果数量级不同，又没有其他序列对得出的指标结果作归一化消除数量级的影响
     return MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MALE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE, VAR, R2, PR, SR, KT, WT, MGC, y_true_trun, y_pred_trun
 
-
-results = np.array([0.1,0.2,0.3,0.4])
-# w1相反数权重，当results中元素个数为2时，生成的w1为对称关系，指标0.4:0.6变为权重0.6:0.4；当元素个数增加时，权重间的比例会被压缩，这对于指标到权重的变换是有益的。
-w1 = (results.sum()-results) / (results.sum()-results).sum()
-print('w:', w1, '\n', sum(w1))
-# w2倒数权重，在整个定义域内指标和权重都是对称关系，例如指标为[0.1,0.2,0.3,0.4]，则权重为对称的[0.48,0.24,0.16,0.12]，但指标的倍数关系会大于趋近程度的倍数关系，所以是更极端的。
-w2 = (results.sum() / results) / (results.sum() / results).sum()
-print('w:', w2, '\n', sum(w2))
+if __name__ == "__main__":
+    results = np.array([0.1,0.2,0.3,0.4])
+    # w1相反数权重，当results中元素个数为2时，生成的w1为对称关系，指标0.4:0.6变为权重0.6:0.4；当元素个数增加时，权重间的比例会被压缩，这对于指标到权重的变换是有益的。
+    w1 = (results.sum()-results) / (results.sum()-results).sum()
+    print('w:', w1, '\n', sum(w1))
+    # w2倒数权重，在整个定义域内指标和权重都是对称关系，例如指标为[0.1,0.2,0.3,0.4]，则权重为对称的[0.48,0.24,0.16,0.12]，但指标的倍数关系会大于趋近程度的倍数关系，所以是更极端的。
+    w2 = (results.sum() / results) / (results.sum() / results).sum()
+    print('w:', w2, '\n', sum(w2))
