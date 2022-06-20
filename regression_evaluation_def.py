@@ -269,7 +269,7 @@ def male(y_true, y_pred):
     return male
 
 @print_execute_time
-def regression_accuracy_pairs(y_true, y_pred):
+def regression_accuracy_pairs(y_true, y_pred, w=[3,2,2,1, 1,1,1,3,1,1, 1,1, 1/2,1/10,1,1,1,1,1]):
     """
     :param y_true: 若干条真实序列组成的一个二维list或array或series，其中的每条真实序列必须是带索引的series，为了能对>0的数值的索引取交集；并与y_pred中的预测序列按顺序一一对应
     :param y_pred: 若干条预测序列组成的一个二维list或array或series，其中的每条预测序列必须是带索引的series，为了能对>0的数值的索引取交集；并与y_true中的真实序列按顺序一一对应
@@ -340,7 +340,7 @@ def regression_accuracy_pairs(y_true, y_pred):
         # 不用调和平均、几何平均，避免结果向极小值趋近；不用均方根，避免结果向极大值趋近；使用算术平均加权，权重可根据实际需求手动调整。
         precision.append(dyn_seri_weighted([MAPE_1[i], SMAPE_1[i], RMSPE_1[i], MTD_p2_1[i],
                                       EMLAE_1[i], MALE_1[i], MAE_1[i], RMSE_1[i], MedAE_1[i], MTD_p1_1[i],
-                                      MSE_1[i], MSLE_1[i]], w=[3,2,2,1, 1,1,1,3,1,1, 1,1]))
+                                      MSE_1[i], MSLE_1[i]], w=w))
 
     # 注意返回的各分量精度指标是未归一化前的数值，而最终precision是由各分量精度指标归一化后的数值算出的
     return precision, MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MALE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE, y_true_trun, y_pred_trun
@@ -576,7 +576,7 @@ def correlation_population(pop1, pop2):
     return corr
 
 @print_execute_time
-def regression_evaluation_pairs(y_true, y_pred):
+def regression_evaluation_pairs(y_true, y_pred, w=[3,2,2,1, 1,1,1,3,1,1, 1,1, 1/2,1/10,1,1,1,1,1]):
     """
     :param y_true: 若干条真实序列组成的一个二维list或array或series，其中的每条真实序列必须是带索引的series，为了能对>0的数值的索引取交集；
     并与y_pred中的预测序列按顺序一一对应；y_true是历史上进模型之前的可能经过处理的真实值。
@@ -683,7 +683,7 @@ def regression_evaluation_pairs(y_true, y_pred):
                                       EMLAE_1[i], MALE_1[i], MAE_1[i], RMSE_1[i], MedAE_1[i], MTD_p1_1[i],
                                       MSE_1[i], MSLE_1[i],
                                       VAR_1[i], R2_1[i], PR_1[i], SR_1[i], KT_1[i], WT_1[i], MGC_1[i]],
-                                      w=[3,2,2,1, 1,1,1,3,1,1, 1,1, 1/2,1/10,1,1,1,1,1]))
+                                      w=w))
 
     # 注意返回的各分量指标是未数值变换前的结果，而最终precision是由各分量指标经数值变换后的结果加权算出的
     return evaluation, MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MALE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE, VAR, R2, PR, SR, KT, WT, MGC, y_true_trun, y_pred_trun
