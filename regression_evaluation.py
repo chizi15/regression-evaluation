@@ -26,7 +26,7 @@ for i in range(-base_value + 1, 1):
 weights = np.array(weights)
 
 
-# #########################################################--构造乘法周期性时间序列，模拟真实销售；外层是list，内层的每一条序列是series
+##########################################################--构造乘法周期性时间序列，模拟真实销售；外层是list，内层的每一条序列是series
 y_level_actual, y_trend_actual, y_season_actual, y_noise_actual, y_input_mul_actual = [[]] * len(length), [[]] * len(length), [[]] * len(length), [[]] * len(length), [[]] * len(length)
 for i in range(0, len(length)):
     y_season_actual[i] = np.sqrt(base_value) * np.sin(np.linspace(np.pi / 2, 10 * np.pi, length[i]))  # 用正弦函数模拟周期性
@@ -98,6 +98,7 @@ for i in range(len(y_input_mul_actual)):
     y_trend_pred[i].plot(ax=ax3, legend=True)
     y_season_pred[i].plot(ax=ax4, legend=True)
     y_noise_pred[i].plot(ax=ax5, legend=True)
+    plt.show()
 
 
 def print_execute_time(func):
@@ -361,7 +362,7 @@ def male(y_true, y_pred):
     return male
 
 @print_execute_time
-def regression_accuracy_pairs(y_true, y_pred):
+def regression_accuracy_pairs(y_true, y_pred, w=[3,2,2,1, 1,1,1,3,1,1, 1,1]):
     """
     :param y_true: 若干条真实序列组成的一个二维list或array或series，其中的每条真实序列必须是带索引的series，为了能对>0的数值的索引取交集；并与y_pred中的预测序列按顺序一一对应
     :param y_pred: 若干条预测序列组成的一个二维list或array或series，其中的每条预测序列必须是带索引的series，为了能对>0的数值的索引取交集；并与y_true中的真实序列按顺序一一对应
@@ -397,6 +398,7 @@ def regression_accuracy_pairs(y_true, y_pred):
         y_pred_trun[i].plot(ax=ax, legend=True)
         print('第{0}组实际输入的序列对：'.format(i))
         print(y_true_trun[i], '\n', y_pred_trun[i], '\n')
+    plt.show()
 
     for i in range(len(y_true_trun)):
         # 第一组，零次的相对性指标：
@@ -450,7 +452,7 @@ def regression_accuracy_pairs(y_true, y_pred):
         # 不用调和平均、几何平均，避免结果向极小值趋近；不用均方根，避免结果向极大值趋近；使用算术平均加权，权重可根据实际需求手动调整。
         precision.append(dyn_seri_weighted([MAPE_1[i], SMAPE_1[i], RMSPE_1[i], MTD_p2_1[i],
                                       EMLAE_1[i], MALE_1[i], MAE_1[i], RMSE_1[i], MedAE_1[i], MTD_p1_1[i],
-                                      MSE_1[i], MSLE_1[i]], w=[3,2,2,1, 1,1,1,3,1,1, 1,1]))
+                                      MSE_1[i], MSLE_1[i]], w=w))
     print('各序列对的最终精度（越接近0越好）：', '\n', np.array(precision), '\n')
 
     # 注意返回的各分量精度指标是未归一化前的数值，而最终precision是由各分量精度指标归一化后的数值算出的
@@ -483,6 +485,7 @@ def regression_accuracy_single(y_true, y_pred):
     # xlim = plt.gca().set_xlim(0, 1)  # xlim使图形按x轴上的点数充满横坐标
     y_true_trun.plot(ax=ax, legend=True)
     y_pred_trun.plot(ax=ax, legend=True)
+    plt.show()
     print('实际输入的序列对：')
     print(y_true_trun, '\n', y_pred_trun, '\n')
 
@@ -532,6 +535,7 @@ def regression_correlaiton_pairs(y_true, y_pred):
             plt.scatter(y=y_true_trun[i], x=y_pred_trun[i])
             plt.xlabel('y_pred_trun[{0}]'.format(i))
             plt.ylabel('y_true_trun[{0}]'.format(i))
+            plt.show()
 
         for i in range(len(y_true_trun)):
             if (len(y_true_trun[i]) < 5) or (len(y_pred_trun[i]) < 5):
@@ -614,6 +618,7 @@ def regression_correlaiton_single(y_true, y_pred, type='high'):
     plt.scatter(y=y_true_trun, x=y_pred_trun)
     plt.xlabel('y_pred_trun')
     plt.ylabel('y_true_trun')
+    plt.show()
 
     if type=='high' and len(y_true_trun) >= 5 and len(y_pred_trun) >= 5:
         try:
@@ -719,7 +724,7 @@ def correlation_population(pop1, pop2):
     return corr
 
 @print_execute_time
-def regression_evaluation_pairs(y_true, y_pred):
+def regression_evaluation_pairs(y_true, y_pred, w=[3,2,2,1, 1,1,1,3,1,1, 1,1, 1/2,1/10,1,1,1,1,1]):
     """
     :param y_true: 若干条真实序列组成的一个二维list或array或series，其中的每条真实序列必须是带索引的series，为了能对>0的数值的索引取交集；
     并与y_pred中的预测序列按顺序一一对应；y_true是历史上进模型之前的可能经过处理的真实值。
@@ -760,6 +765,7 @@ def regression_evaluation_pairs(y_true, y_pred):
         y_pred_trun[i].plot(ax=ax, legend=True)
         print('第{0}组实际输入的序列对：'.format(i))
         print(y_true_trun[i], '\n', y_pred_trun[i], '\n')
+    plt.show()
 
     for i in range(len(y_true_trun)):
         # 第四组相关性函数使用如图所示形态的数据作为输入值。此for循环不能与上一个for循环合并，否则会错误调用plt。
@@ -767,6 +773,7 @@ def regression_evaluation_pairs(y_true, y_pred):
         plt.scatter(y=y_true_trun[i], x=y_pred_trun[i])
         plt.xlabel('y_pred_trun[{0}]'.format(i))
         plt.ylabel('y_true_trun[{0}]'.format(i))
+        plt.show()
 
     for i in range(len(y_true_trun)):
         if (len(y_true_trun[i]) < 5) or (len(y_pred_trun[i]) < 5):
@@ -851,7 +858,7 @@ def regression_evaluation_pairs(y_true, y_pred):
                                       EMLAE_1[i], MALE_1[i], MAE_1[i], RMSE_1[i], MedAE_1[i], MTD_p1_1[i],
                                       MSE_1[i], MSLE_1[i],
                                       VAR_1[i], R2_1[i], PR_1[i], SR_1[i], KT_1[i], WT_1[i], MGC_1[i]],
-                                      w=[3,2,2,1, 1,1,1,3,1,1, 1,1, 1/2,1/10,1,1,1,1,1]))
+                                      w=w))
     print('各序列对的最终精度：', '\n', np.array(evaluation), '\n')
 
     # 注意返回的各分量指标是未数值变换前的结果，而最终precision是由各分量指标经数值变换后的结果加权算出的
@@ -887,6 +894,7 @@ def regression_evaluation_single(y_true, y_pred):
     # xlim = plt.gca().set_xlim(0, length-1)  # xlim使图形按x轴上的点数充满横坐标
     y_true_trun.plot(ax=ax, legend=True)
     y_pred_trun.plot(ax=ax, legend=True)
+    plt.show()
     print('实际输入的序列对：')
     print(y_true_trun, '\n', y_pred_trun, '\n')
 
@@ -895,11 +903,12 @@ def regression_evaluation_single(y_true, y_pred):
     plt.scatter(y=y_true_trun, x=y_pred_trun)
     plt.xlabel('y_pred_trun')
     plt.ylabel('y_true_trun')
+    plt.show()
 
     if (len(y_true_trun) < 5) or (len(y_pred_trun) < 5):
         raise Exception('实际使用的序列对y_true_trun与y_pred_trun中，点数过少不具有统计意义，每条序列至少要≥5个点')
     # 第一组，零次的相对性指标：
-    MAPE=mape(y_true=np.array(y_true_trun), y_pred=np.array(y_pred_trun))  # y_true != 0; no bias
+    MAPE = mape(y_true=np.array(y_true_trun), y_pred=np.array(y_pred_trun))  # y_true != 0; no bias
     SMAPE = smape(y_true=np.array(y_true_trun), y_pred=np.array(y_pred_trun))  # y_true + y_pred != 0; symmetric MAPE, no bias and more general, less susceptible to outliers than MAPE.
     RMSPE = eval_measures.rmspe(np.array(y_true_trun), np.array(y_pred_trun)) / 10  # y_true != 0; susceptible to outliers of deviation ratio, if more, RMSPE will be larger than MAPE.
     MTD_p2 = metrics.mean_tweedie_deviance(y_true=np.array(y_true_trun), y_pred=np.array(y_pred_trun), power=2) # y_pred > 0, y_true > 0; less susceptible to outliers than MAPE when y_pred / y_true > 1, nevertheless, more susceptible to outliers than MAPE when y_pred / y_true < 1
@@ -933,6 +942,39 @@ def regression_evaluation_single(y_true, y_pred):
 
     # 无法得出最终precision，因为各指标的结果数量级不同，又没有其他序列对得出的指标结果作归一化消除数量级的影响
     return MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MALE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE, VAR, R2, PR, SR, KT, WT, MGC, y_true_trun, y_pred_trun
+
+
+def accuracy_single(y_true, y_pred):
+    y_true, y_pred = pd.Series(y_true), pd.Series(y_pred)
+    if sum(y_true) == 0:
+        return None
+    elif np.count_nonzero(y_true) < 2 / 3 * len(y_true) or len(y_true) == 1:
+        y_true, y_pred = sum(y_true), sum(y_pred)
+        if y_true >= y_pred:  # 当预测值小于真实值，直接计算精度，无需通过偏差来计算精度
+            accuracy = y_pred / y_true
+            return accuracy
+        else:
+            APE = abs((y_true - y_pred) / y_true)
+            SAPE = 2 * abs((y_true - y_pred) / (y_true + y_pred))
+            bias = dyn_seri_weighted([APE, SAPE], type='gmean', w=[2, 1])
+            if bias <= 0.4:  # 假定偏差bias<=40%为合格，此阶段偏差与精度为线性反向关系；
+                accuracy = 1 - bias
+            else:  # 当偏差超过40%，由于偏差也可能超过1，则将其与精度压缩为指数关系，使精度始终为正
+                accuracy = np.exp(np.log(1 - 0.4) / -0.4) ** (-bias)
+            return accuracy
+    else:  # 当序列中非零值超过2/3时，则剔除对应值，逐点计算精度，使粒度最细
+        judge = y_true > 0.01
+        y_true = y_true[judge]
+        y_pred = y_pred[judge]
+        MAPE = sum(abs((y_true - y_pred) / y_true)) / len(y_true)
+        SMAPE = sum(abs(2 * (y_true - y_pred) / (y_true + y_pred))) / len(y_true)
+        RMSPE = np.sqrt(sum(((y_true - y_pred) / y_true) ** 2) / len(y_true))
+        bias = dyn_seri_weighted([MAPE, SMAPE, RMSPE], type='gmean', w=[2, 1, 0.5])
+        if bias <= 0.4:
+            accuracy = 1 - bias
+        else:
+            accuracy = np.exp(np.log(1 - 0.4) / -0.4) ** (-bias)
+        return accuracy
 
 
 results_v1_all = regression_accuracy_pairs(y_true=y_input_mul_actual[:], y_pred=y_input_mul_pred[:])
@@ -995,3 +1037,5 @@ print('w:', w2, '\n', sum(w2))
 # 这里采用y=1-x，而不用y=1/x，可以避免当x较小时，1/x被放大过多，且一点微小的扰动都会对1/x产生较大影响的不利效应。
 # 3.预测下一个月的新数据时，将每个门店单品两个模型的预测序列和各自权重w输入dyn_df_weighted，得到一条预测序列，就是最终发布的预测值。
 ###############################################################################################################
+
+print('\n', '预测精度：', accuracy_single(y_input_mul_actual[-1], y_input_mul_pred[-1]))
