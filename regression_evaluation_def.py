@@ -748,6 +748,40 @@ def regression_evaluation_single(y_true, y_pred):
     # 无法得出最终precision，因为各指标的结果数量级不同，又没有其他序列对得出的指标结果作归一化消除数量级的影响
     return MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MALE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE, VAR, R2, PR, SR, KT, WT, MGC, y_true_trun, y_pred_trun
 
+
+def accuracy_single(y_true, y_pred):
+    y_true, y_pred = pd.Series(y_true), pd.Series(y_pred)
+    if sum(y_true) == 0:
+        return None
+    elif np.count_nonzero(y_true) < 2 / 3 * len(y_true) or len(y_true) == 1:
+        y_true, y_pred = sum(y_true), sum(y_pred)
+        if y_true >= y_pred:  # 当预测值小于真实值，直接计算精度，无需通过偏差来计算精度
+            accuracy = y_pred / y_true
+            return accuracy
+        else:
+            APE = abs((y_true - y_pred) / y_true)
+            SAPE = 2 * abs((y_true - y_pred) / (y_true + y_pred))
+            bias = dyn_seri_weighted([APE, SAPE], type='gmean', w=[2, 1])
+            if bias <= 0.4:  # 假定偏差bias<=40%为合格，此阶段偏差与精度为线性反向关系；
+                accuracy = 1 - bias
+            else:  # 当偏差超过40%，由于偏差也可能超过1，则将其与精度压缩为指数关系，使精度始终为正
+                accuracy = np.exp(np.log(1 - 0.4) / -0.4) ** (-bias)
+            return accuracy
+    else:  # 当序列中非零值超过2/3时，则剔除对应值，逐点计算精度，使粒度最细
+        judge = y_true > 0.01
+        y_true = y_true[judge]
+        y_pred = y_pred[judge]
+        MAPE = sum(abs((y_true - y_pred) / y_true)) / len(y_true)
+        SMAPE = sum(abs(2 * (y_true - y_pred) / (y_true + y_pred))) / len(y_true)
+        RMSPE = np.sqrt(sum(((y_true - y_pred) / y_true) ** 2) / len(y_true))
+        bias = dyn_seri_weighted([MAPE, SMAPE, RMSPE], type='gmean', w=[2, 1, 0.5])
+        if bias <= 0.4:
+            accuracy = 1 - bias
+        else:
+            accuracy = np.exp(np.log(1 - 0.4) / -0.4) ** (-bias)
+        return accuracy
+
+
 if __name__ == "__main__":
     results = np.array([0.1,0.2,0.3,0.4])
     # w1相反数权重，当results中元素个数为2时，生成的w1为对称关系，指标0.4:0.6变为权重0.6:0.4；当元素个数增加时，权重间的比例会被压缩，这对于指标到权重的变换是有益的。
