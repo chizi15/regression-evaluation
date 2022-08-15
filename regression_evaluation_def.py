@@ -10,6 +10,7 @@ warnings.filterwarnings('ignore')
 
 def print_execute_time(func):
     from time import time
+
     # 定义嵌套函数，用来打印出装饰的函数的执行时间
     def wrapper(*args, **kwargs):
         # 定义开始时间和结束时间，将func夹在中间执行，取得其返回值
@@ -54,7 +55,8 @@ def s_curve_interp(n, x=(1, 10, 20, 30), y=(1e-5, 0.1, 0.9, 1)):
         if r < 0:
             r = cs1(x[0]+1)
     elif x[1] <= n < x[2]:
-        cs2 = CubicSpline(x[1:3], y[1:3], bc_type=((1, y[1] / x[1]**0.5), (1, (y[2]-y[1]) / (x[2]-x[1])**2)), extrapolate=False)
+        cs2 = CubicSpline(x[1:3], y[1:3], bc_type=((1, y[1] / x[1]**0.5), (1, (y[2]-y[1]) / (x[2]-x[1])**2)),
+                          extrapolate=False)
         r = cs2(n)
     else:
         cs3 = CubicSpline(x[-2:], y[-2:], bc_type=((1, (y[2] - y[1]) / (x[2] - x[1]) ** 2), (1, (y[3] - y[2]) / (x[3] - x[2]) ** 2)), extrapolate=False)
@@ -204,9 +206,11 @@ def train_check(score):
         else:
             return 'no-train'
 
+
 # y_true, y_pred无限制条件
 def rmse(y_true, y_pred):
     return np.sqrt(((y_true - y_pred) ** 2).mean())
+
 
 # y_true, y_pred无限制条件
 def emlae(y_true, y_pred):
@@ -220,6 +224,7 @@ def emlae(y_true, y_pred):
     y_pred = np.array(y_pred)
     emlae = np.exp(sum(np.log(abs(y_pred - y_true) + 1)) / n) - 1
     return emlae
+
 
 # y_true, y_pred无限制条件
 def mape(y_true, y_pred):
@@ -235,6 +240,7 @@ def mape(y_true, y_pred):
     y_true = y_true[y_true != 0]
     n = len(y_true)
     return round((sum(abs((y_pred - y_true) / y_true)) / n), 4)
+
 
 # y_true, y_pred无限制条件
 def smape(y_true, y_pred):
@@ -253,6 +259,7 @@ def smape(y_true, y_pred):
     n = len(y_true_f)
     return round(sum(abs(2 * (y_pred_f - y_true_f) / (abs(y_pred_f) + abs(y_true_f)))) / n, 4)
 
+
 # y_true, y_pred无限制条件
 def male(y_true, y_pred):
     """
@@ -268,14 +275,14 @@ def male(y_true, y_pred):
     male = sum(abs(np.log(abs(y_true+1)) - np.log(abs(y_pred+1)))) / len(y_true)
     return male
 
+
 @print_execute_time
-def regression_accuracy_pairs(y_true, y_pred, w=[3,2,2,1, 1,1,1,3,1,1, 1,1, 1/2,1/10,1,1,1,1,1]):
+def regression_accuracy_pairs(y_true, y_pred, w=(3,2,2,1, 1,1,1,3,1,1, 1,1)):
     """
     :param y_true: 若干条真实序列组成的一个二维list或array或series，其中的每条真实序列必须是带索引的series，为了能对>0的数值的索引取交集；并与y_pred中的预测序列按顺序一一对应
     :param y_pred: 若干条预测序列组成的一个二维list或array或series，其中的每条预测序列必须是带索引的series，为了能对>0的数值的索引取交集；并与y_true中的真实序列按顺序一一对应
+    :param w: 各个指标的权重
     :return: 精度指标，按顺序分别是：最终精度指标(precision)，MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE
-
-    特别注意：在返回的指标中，
 
     测试几种常用的评价序列对的精度指标
     原则：1.带平方项的指标会放大在正负1之外的残差的影响，而压缩在正负1之内的残差的影响，由于各指标越接近零越好，则会惩罚正负1之外的残差，偏离正负1越远，越受到惩罚；而奖励正负1之内的残差。
@@ -294,7 +301,8 @@ def regression_accuracy_pairs(y_true, y_pred, w=[3,2,2,1, 1,1,1,3,1,1, 1,1, 1/2,
         if sum(judge):
             y_true_trun.append(y_true[i][judge])
             y_pred_trun.append(y_pred[i][judge])
-        else: continue
+        else:
+            continue
 
     if (len(y_true_trun) != len(y_pred_trun)) or (len(y_true_trun) < 2):
         raise Exception('y_true_trun与y_pred_trun中序列条数必须相等且≥2')  # 因为若序列对的数目小于2，则数值变换后的指标均为1，就起不到指标评估的作用了。
@@ -305,6 +313,7 @@ def regression_accuracy_pairs(y_true, y_pred, w=[3,2,2,1, 1,1,1,3,1,1, 1,1, 1/2,
         SMAPE.append(smape(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true + y_pred != 0; symmetric MAPE, no bias and more general, less susceptible to outliers than MAPE.
         RMSPE.append(eval_measures.rmspe(np.array(y_true_trun[i]), np.array(y_pred_trun[i])) / 10)  # y_true != 0; susceptible to outliers of deviation ratio, if more, RMSPE will be larger than MAPE.
         MTD_p2.append(metrics.mean_tweedie_deviance(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i]), power=2)) # y_pred > 0, y_true > 0; less susceptible to outliers than MAPE when y_pred[i] / y_true[i] > 1, nevertheless, more susceptible to outliers than MAPE when y_pred[i] / y_true[i] < 1
+
         # 第二组，一次的绝对性指标：
         EMLAE.append(emlae(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件; less susceptible to outliers of error than MAE, so this will penalize small deviation and award large deviation relative to MAE.
         MALE.append(male(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件;
@@ -312,6 +321,7 @@ def regression_accuracy_pairs(y_true, y_pred, w=[3,2,2,1, 1,1,1,3,1,1, 1,1, 1/2,
         RMSE.append(eval_measures.rmse(np.array(y_true_trun[i]), np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件；susceptible to outliers of error than MAE, so this will penalize large deviation and award small deviation relative to MAE.
         MedAE.append(metrics.median_absolute_error(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件； if len(y) is slightly large; won't be affected by outliers completely
         MTD_p1.append(metrics.mean_tweedie_deviance(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i]), power=1))  # y_pred > 0, y_true ≥ 0; The higher `p` the less weight is given to extreme deviations between true and predicted targets.
+
         # 第三组，二次的绝对性指标：
         MSE.append(metrics.mean_squared_error(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件； this metric penalizes a large residual greater than a small residual because of square
         MSLE.append(metrics.mean_squared_log_error(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true≥0, y_pred≥0； this metric penalizes an under-predicted estimate greater than an over-predicted estimate because of logarithm
@@ -360,12 +370,11 @@ def regression_accuracy_single(y_true, y_pred):
 
     # 为了统一下列12个精度指标的条件，在y_true和y_pred的序列对中，取大于0的对应点，即排除≤0的对应点；但不应取>0，可以取>0.01，否则若序列中存在大于0但非常接近0的数做分母，可能产生很大的值，不利于得到有效可用的精度值
     judge = (y_true > 0.01) & (y_pred > 0.01)
-    if sum(judge):
-        y_true_trun = y_true[judge]
-        y_pred_trun = y_pred[judge]
-
-    if (len(y_true_trun) != len(y_pred_trun)) or (len(y_true_trun) < 2):
-        raise Exception('y_true_trun与y_pred_trun中序列条数必须相等且≥2')  # 若序列对的数目小于2，则数值变换后的指标均为1
+    # if sum(judge):
+    y_true_trun = y_true[judge]
+    y_pred_trun = y_pred[judge]
+    if len(y_true_trun) < 2:
+        raise Exception('序列中可对比点数<2')
 
     # 第一组，零次的相对性指标：
     MAPE = mape(y_true=np.array(y_true_trun), y_pred=np.array(y_pred_trun))  # y_true != 0; no bias
@@ -386,12 +395,16 @@ def regression_accuracy_single(y_true, y_pred):
     # 无法得出最终precision，因为各指标的结果数量级不同，又没有其他序列对得出的指标结果作归一化消除数量级的影响
     return MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MALE, MAE, RMSE, MedAE, MTD_p1, MSE, MSLE, y_true_trun, y_pred_trun
 
+
 @print_execute_time
 def regression_correlaiton_pairs(y_true, y_pred):
     """
+    序列中不能出现所有元素都相同的情况
+
     :param y_true: 若干条真实序列组成的一个二维list或array或series；并与y_pred中的预测序列按顺序一一对应；y_true是历史上进模型之前的可能经过处理的真实值。
     :param y_pred: 若干条预测序列组成的一个二维list或array或series；并与y_true中的真实序列按顺序一一对应；y_pred是历史上该模型输出的预测值，或者经过补偿的预测值，总之是最终用于订货的预测值。
     y_true，y_pred也可以是需要进行相关性计算的多组序列对，其中每条序列中的元素个数是每个样本的特征数
+
     :return: 各个相关性指标，按顺序分别是：综合相关性指标(correlation)，PR, SR, KT, WT, MGC，越接近1越好.
     PR,KT,WT需样本点数≥2，否则返回空；SR需样本点数≥3，否则返回空；MGC需样本点数≥5，否则返回空
     """
@@ -460,12 +473,17 @@ def regression_correlaiton_pairs(y_true, y_pred):
         raise Exception('y_true_trun与y_pred_trun中序列条数必须相等且>1')
 
 
-def regression_correlaiton_single(y_true, y_pred, type='high'):
+def regression_correlaiton_single(y_true, y_pred, type='high', w=(1,4,2,2,3)):
     """
+    序列中不能出现所有元素都相同的情况
+
     :param y_true: 一条真实序列，并与预测序列按顺序一一对应；y_true是历史上进模型之前的可能经过处理的真实值。
     :param y_pred: 一条预测序列，并与真实序列按顺序一一对应；y_pred是历史上该模型输出的预测值，或者经过补偿的预测值，总之是最终用于订货的预测值。
     y_true，y_pred也可以是需要进行相关性计算的多组序列对，其中每条序列中的元素个数是每个样本的特征数
     :type: 'high' includes MGC, which is the best but time costs, however, 'low' does not include.
+    :param w_h: type='high'，各指标权重
+    :param w_l: type='low'，各指标权重
+
     :return: 各个相关性指标，按顺序分别是：综合相关性指标(correlation)，PR, SR, KT, WT, MGC(type='high')，越接近1越好。
     PR,KT,WT需样本点数≥2，否则返回空；SR需样本点数≥3，否则返回空；MGC需样本点数≥5，否则返回空
     """
@@ -500,10 +518,11 @@ def regression_correlaiton_single(y_true, y_pred, type='high'):
             dist_sum = df_distance.sum()
             # 对距离的比例取相反数，使距离越大，其值越小，并为线性关系。再+1使距离比例为正，则归一化后为正确逻辑的权重；若不使距离比例为正，则归一化后仍是距离越大权重越大的错误逻辑
             df_wight = 1 - df_distance / dist_sum
+            df_wight2 = df_wight * w  # 考虑各指标的权重
             # 计算调整逻辑后的权重之和
-            df_wight_sum = df_wight.sum()
+            df_wight2_sum = df_wight2.sum()
             # 计算调整逻辑后的各个权重，并用调整后的权重计算各个指标的加权平均
-            wighted_corr = np.sum(metrics_raw * df_wight / df_wight_sum)
+            wighted_corr = np.sum(metrics_raw * df_wight2 / df_wight2_sum)
 
             metrics_raw = {'PRmul': PRmul, 'SRmul': SRmul, 'KTmul': KTmul, 'WTmul': WTmul,
                            'MGCmul': MGCmul}  # samples belong the row, metrics belong the colmun
@@ -514,7 +533,7 @@ def regression_correlaiton_single(y_true, y_pred, type='high'):
 
         except Exception as e:
             error = e
-            # print('MGC error: ', error)
+            print('MGC error: ', error)
             metrics_raw = {'correlation': 0, 'PRmul': np.nan, 'SRmul': np.nan, 'KTmul': np.nan, 'WTmul': np.nan}  # samples belong the row, metrics belong the colmun
             df_raw = pd.DataFrame(metrics_raw, index={'corr of series'})
             return df_raw[['correlation', 'PRmul', 'SRmul', 'KTmul', 'WTmul']], [y_true_trun, y_pred_trun]
@@ -542,10 +561,11 @@ def regression_correlaiton_single(y_true, y_pred, type='high'):
             dist_sum = df_distance.sum()
             # 对距离的比例取相反数，使距离越大，其值越小，并为线性关系。再+1使距离比例为正，则归一化后为正确逻辑的权重；若不使距离比例为正，则归一化后仍是距离越大权重越大的错误逻辑
             df_wight = 1 - df_distance / dist_sum
+            df_wight2 = df_wight * w[:-1]
             # 计算调整逻辑后的权重之和
-            df_wight_sum = df_wight.sum()
+            df_wight2_sum = df_wight2.sum()
             # 计算调整逻辑后的各个权重，并用调整后的权重计算各个指标的加权平均
-            wighted_corr = np.sum(metrics_raw * df_wight / df_wight_sum)
+            wighted_corr = np.sum(metrics_raw * df_wight2 / df_wight2_sum)
 
             # 对各个相关性指标考虑置信度：p-value越大，越不能拒绝原假设（序列对无关），备择假设（序列对相关）越不可信，则相关系数乘以越小的系数，则认为序列对的实际相关性，跟计算出的相关系数比，越低
             metrics_raw = {'PRmul': PRmul, 'SRmul': SRmul, 'KTmul': KTmul, 'WTmul': WTmul}  # samples belong the row, metrics belong the colmun
@@ -555,12 +575,13 @@ def regression_correlaiton_single(y_true, y_pred, type='high'):
             return df_raw[['correlation', 'PRmul', 'SRmul', 'KTmul', 'WTmul']], [y_true_trun, y_pred_trun]
 
         except Exception as e:
-            # print('sample error: ', e)
+            print('sample error: ', e)
             metrics_raw = {'correlation': np.nan, 'PRmul': np.nan, 'SRmul': np.nan, 'KTmul': np.nan, 'WTmul': np.nan}  # samples belong the row, metrics belong the colmun
             df_raw = pd.DataFrame(metrics_raw, index={'corr of series'})
             return df_raw[['correlation', 'PRmul', 'SRmul', 'KTmul', 'WTmul']], [y_true_trun, y_pred_trun]
     else:
         raise Exception('type must be either low or high')
+
 
 @print_execute_time
 def correlation_population(pop1, pop2):
@@ -575,13 +596,18 @@ def correlation_population(pop1, pop2):
 
     return corr
 
+
 @print_execute_time
-def regression_evaluation_pairs(y_true, y_pred, w=[3,2,2,1, 1,1,1,3,1,1, 1,1, 1/2,1/10,1,1,1,1,1]):
+def regression_evaluation_pairs(y_true, y_pred, w=(3,2,2,1, 1,1,1,3,1,1, 1,1, 1/2,1/3,1/2,3,1,1,2)):
     """
+    序列中不能出现所有元素都相同的情况
+
     :param y_true: 若干条真实序列组成的一个二维list或array或series，其中的每条真实序列必须是带索引的series，为了能对>0的数值的索引取交集；
     并与y_pred中的预测序列按顺序一一对应；y_true是历史上进模型之前的可能经过处理的真实值。
     :param y_pred: 若干条预测序列组成的一个二维list或array或series，其中的每条预测序列必须是带索引的series，为了能对>0的数值的索引取交集；
     并与y_true中的真实序列按顺序一一对应；y_pred是历史上该模型输出的预测值，或者经过补偿的预测值，总之是最终用于订货的预测值。
+    :param w: 各指标权重
+
     :return: 精度指标，按顺序分别是：最终精度指标(evaluation), MAPE, SMAPE, RMSPE, MTD_p2, EMLAE, MALE, MAE, RMSE, MedAE,
     MTD_p1, MSE, MSLE, VAR, R2, PR, SR, KT, WT, MGC.
     PR,KT,WT需样本点数≥2，否则返回空；SR需样本点数≥3，否则返回空；MGC需样本点数≥5，否则返回空.
@@ -621,6 +647,7 @@ def regression_evaluation_pairs(y_true, y_pred, w=[3,2,2,1, 1,1,1,3,1,1, 1,1, 1/
         SMAPE.append(smape(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true + y_pred != 0; symmetric MAPE, no bias and more general, less susceptible to outliers than MAPE.
         RMSPE.append(eval_measures.rmspe(np.array(y_true_trun[i]), np.array(y_pred_trun[i])) / 10)  # y_true != 0; susceptible to outliers of deviation ratio, if more, RMSPE will be larger than MAPE.
         MTD_p2.append(metrics.mean_tweedie_deviance(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i]), power=2)) # y_pred > 0, y_true > 0; less susceptible to outliers than MAPE when y_pred[i] / y_true[i] > 1, nevertheless, more susceptible to outliers than MAPE when y_pred[i] / y_true[i] < 1
+
         # 第二组，一次的绝对性指标：
         EMLAE.append(emlae(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件; less susceptible to outliers of error than MAE, so this will penalize small deviation and award large deviation relative to MAE.
         MALE.append(male(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件;
@@ -628,9 +655,11 @@ def regression_evaluation_pairs(y_true, y_pred, w=[3,2,2,1, 1,1,1,3,1,1, 1,1, 1/
         RMSE.append(eval_measures.rmse(np.array(y_true_trun[i]), np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件；susceptible to outliers of error than MAE, so this will penalize large deviation and award small deviation relative to MAE.
         MedAE.append(metrics.median_absolute_error(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件； if len(y) is slightly large; won't be affected by outliers completely
         MTD_p1.append(metrics.mean_tweedie_deviance(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i]), power=1))  # y_pred > 0, y_true ≥ 0; The higher `p` the less weight is given to extreme deviations between true and predicted targets.
+
         # 第三组，二次的绝对性指标：
         MSE.append(metrics.mean_squared_error(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true, y_pred无限制条件； this metric penalizes a large residual greater than a small residual because of square
         MSLE.append(metrics.mean_squared_log_error(y_true=np.array(y_true_trun[i]), y_pred=np.array(y_pred_trun[i])))  # y_true≥0, y_pred≥0； this metric penalizes an under-predicted estimate greater than an over-predicted estimate because of logarithm
+
         # 第四组，相关性指标：
         # VAR作为相关性评价指标是最"僵硬的"，每个点的残差都相同时，VAR=1
         VAR.append(metrics.explained_variance_score(y_true=y_true_trun[i], y_pred=y_pred_trun[i]))  # y_true, y_pred无限制条件；但explained_variance_score为极大化目标函数，值域为(-∞, 1]，越趋近1越好；与其余的极小化目标函数相反，它们的因变量是越小越好。
@@ -710,12 +739,11 @@ def regression_evaluation_single(y_true, y_pred):
 
     # 为了统一下列精度指标的条件，在y_true和y_pred的序列对中，取大于0的对应点，即排除≤0的对应点；但不应取>0，可以取>0.01，否则若序列中存在大于0但非常接近0的数做分母，可能产生很大的值，不利于得到有效可用的精度值
     judge = (y_true > 0.01) & (y_pred > 0.01)
-    if sum(judge):
-        y_true_trun = y_true[judge]
-        y_pred_trun = y_pred[judge]
-
-    if (len(y_true_trun) != len(y_pred_trun)) or (len(y_true_trun) < 2):
-        raise Exception('y_true_trun与y_pred_trun中序列条数必须相等且≥2')  # 若序列对的数目小于2，则数值变换后的指标均为1
+    # if sum(judge):
+    y_true_trun = y_true[judge]
+    y_pred_trun = y_pred[judge]
+    if len(y_true_trun) < 2:
+        raise Exception('序列中可比较点数<2')
 
     if (len(y_true_trun) < 5) or (len(y_pred_trun) < 5):
         raise Exception('实际使用的序列对y_true_trun与y_pred_trun中，点数过少不具有统计意义，每条序列至少要≥5个点')
@@ -724,6 +752,7 @@ def regression_evaluation_single(y_true, y_pred):
     SMAPE = smape(y_true=np.array(y_true_trun), y_pred=np.array(y_pred_trun))  # y_true + y_pred != 0; symmetric MAPE, no bias and more general, less susceptible to outliers than MAPE.
     RMSPE = eval_measures.rmspe(np.array(y_true_trun), np.array(y_pred_trun)) / 10  # y_true != 0; susceptible to outliers of deviation ratio, if more, RMSPE will be larger than MAPE.
     MTD_p2 = metrics.mean_tweedie_deviance(y_true=np.array(y_true_trun), y_pred=np.array(y_pred_trun), power=2) # y_pred > 0, y_true > 0; less susceptible to outliers than MAPE when y_pred / y_true > 1, nevertheless, more susceptible to outliers than MAPE when y_pred / y_true < 1
+
     # 第二组，一次的绝对性指标：
     EMLAE = emlae(y_true=np.array(y_true_trun), y_pred=np.array(y_pred_trun))  # y_true, y_pred无限制条件; less susceptible to outliers of error than MAE, so this will penalize small deviation and award large deviation relative to MAE.
     MALE = male(y_true=np.array(y_true_trun), y_pred=np.array(y_pred_trun))  # y_true, y_pred无限制条件;
@@ -731,9 +760,11 @@ def regression_evaluation_single(y_true, y_pred):
     RMSE = eval_measures.rmse(np.array(y_true_trun), np.array(y_pred_trun))  # y_true, y_pred无限制条件；susceptible to outliers of error than MAE, so this will penalize large deviation and award small deviation relative to MAE.
     MedAE = metrics.median_absolute_error(y_true=np.array(y_true_trun), y_pred=np.array(y_pred_trun))  # y_true, y_pred无限制条件； if len(y) is slightly large; won't be affected by outliers completely
     MTD_p1 = metrics.mean_tweedie_deviance(y_true=np.array(y_true_trun), y_pred=np.array(y_pred_trun), power=1)  # y_pred > 0, y_true ≥ 0; The higher `p` the less weight is given to extreme deviations between true and predicted targets.
+
     # 第三组，二次的绝对性指标：
     MSE = metrics.mean_squared_error(y_true=np.array(y_true_trun), y_pred=np.array(y_pred_trun))  # y_true, y_pred无限制条件； this metric penalizes a large residual greater than a small residual because of square
     MSLE = metrics.mean_squared_log_error(y_true=np.array(y_true_trun), y_pred=np.array(y_pred_trun))  # y_true≥0, y_pred≥0； this metric penalizes an under-predicted estimate greater than an over-predicted estimate because of logarithm
+
     # 第四组，相关性指标：
     # VAR作为相关性评价指标是最"僵硬的"，每个点的残差都相同时，VAR=1
     VAR = metrics.explained_variance_score(y_true=y_true_trun, y_pred=y_pred_trun)  # y_true, y_pred无限制条件；但explained_variance_score为极大化目标函数，值域为(-∞, 1]，越趋近1越好；与其余的极小化目标函数相反，它们的因变量是越小越好。
@@ -782,11 +813,15 @@ def accuracy_single(y_true, y_pred):
         return accuracy
 
 
-if __name__ == "__main__":
-    results = np.array([0.1,0.2,0.3,0.4])
-    # w1相反数权重，当results中元素个数为2时，生成的w1为对称关系，指标0.4:0.6变为权重0.6:0.4；当元素个数增加时，权重间的比例会被压缩，这对于指标到权重的变换是有益的。
-    w1 = (results.sum()-results) / (results.sum()-results).sum()
-    print('w:', w1, '\n', sum(w1))
-    # w2倒数权重，在整个定义域内指标和权重都是对称关系，例如指标为[0.1,0.2,0.3,0.4]，则权重为对称的[0.48,0.24,0.16,0.12]，但指标的倍数关系会大于趋近程度的倍数关系，所以是更极端的。
-    w2 = (results.sum() / results) / (results.sum() / results).sum()
-    print('w:', w2, '\n', sum(w2))
+# if __name__ == "__main__":
+results = np.array([0.1,0.2,0.3,0.4])
+# w1相反数权重，当results中元素个数为2时，生成的w1为对称关系，指标0.4:0.6变为权重0.6:0.4；当元素个数增加时，权重间的比例会被压缩，这对于指标到权重的变换是有益的。
+w1 = (results.sum()-results) / (results.sum()-results).sum()
+print('w:', w1, '\n', sum(w1))
+# w2倒数权重，在整个定义域内指标和权重都是对称关系，例如指标为[0.1,0.2,0.3,0.4]，则权重为对称的[0.48,0.24,0.16,0.12]，但指标的倍数关系会大于趋近程度的倍数关系，所以是更极端的。
+w2 = (results.sum() / results) / (results.sum() / results).sum()
+print('w:', w2, '\n', sum(w2), '\n')
+
+a = [5,5,5,5,5, 6,7,8,9,10]
+b = np.arange(1,11)
+regression_correlaiton_single(a, b, type='high')
