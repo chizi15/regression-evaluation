@@ -559,13 +559,13 @@ def regression_correlaiton_pairs(y_true, y_pred):
             KT.append(stats.kendalltau(x=y_true_trun[i], y=y_pred_trun[i]))  # The two-sided p-value for a hypothesis test whose null hypothesis is an absence of association, tau = 0.
             KTmul.append(KT[i][0] * (1 - KT[i][1]))
             WT.append(stats.weightedtau(x=y_true_trun[i], y=y_pred_trun[i]))
-            WTmul.append(WT[i][0] * (1 - np.mean([PR[1], SR[1], KT[1]])))  # suppose the p-value is mean of others
+            WTmul.append(WT[i][0] * (1 - np.mean([PR[i][1], SR[i][1], KT[i][1]])))  # suppose the p-value is mean of others
             # MGC几乎没有上述鲁棒性问题，且reps越大，p-values越可信，但计算量越大
             MGC.append(
                 stats.multiscale_graphcorr(x=np.array(y_true_trun[i]), y=np.array(y_pred_trun[i]), workers=1,
                                            reps=0, random_state=1)[
                 :2])  # hardly affected by abnormal scatters (i.e. outliers); x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
-            MGCmul.append(MGC[i][0] * (1 - np.mean([PR[1], SR[1], KT[1]])))  # suppose the p-value is mean of others
+            MGCmul.append(MGC[i][0] * (1 - np.mean([PR[i][1], SR[i][1], KT[i][1]])))  # suppose the p-value is mean of others
 
         print('各个原始的相关性指标（越接近1正相关性越强，越接近-1负相关性越强，越接近0相关性越弱）：', '\n', 'PR:', PR, '\n',
               'SR:', SR, '\n', 'KT:', KT, '\n', 'WT:', WT, '\n', 'MGC:', MGC, '\n')
