@@ -427,10 +427,10 @@ def regression_correlaiton_pairs(y_true, y_pred):
             KT.append(stats.kendalltau(x=y_true_trun[i], y=y_pred_trun[i]))
             KTmul.append(KT[i][0] * (1 - KT[i][1]))
             WT.append(stats.weightedtau(x=y_true_trun[i], y=y_pred_trun[i]))
-            WTmul.append(WT[i][0] * (1 - np.mean([PR[1], SR[1], KT[1]])))  # suppose the p-value is 0.05
+            WTmul.append(WT[i][0] * (1 - np.mean([PR[i][1], SR[i][1], KT[i][1]])))  # suppose the p-value is 0.05
             # MGC几乎没有上述鲁棒性问题，且reps越大，p-values越可信，但计算量越大
             MGC.append(stats.multiscale_graphcorr(x=np.array(y_true_trun[i]), y=np.array(y_pred_trun[i]), workers=1, reps=0, random_state=1)[:2])  # hardly affected by abnormal scatters (i.e. outliers); x and y must be ndarrays; MGC requires at least 5 samples to give reasonable results
-            MGCmul.append(MGC[i][0] * (1 - np.mean([PR[1], SR[1], KT[1]])))  # suppose the p-value is mean of others
+            MGCmul.append(MGC[i][0] * (1 - np.mean([PR[i][1], SR[i][1], KT[i][1]])))  # suppose the p-value is mean of others
 
         # 对各个相关性指标考虑置信度：p-value越大，越不能拒绝原假设（序列对无关），备择假设（序列对相关）越不可信，则相关系数乘以越小的系数，则认为序列对的实际相关性，跟计算出的相关系数比，越低
         metrics_raw = {'PRmul': PRmul, 'SRmul': SRmul, 'KTmul': KTmul, 'WTmul': WTmul,
