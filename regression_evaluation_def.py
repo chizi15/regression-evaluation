@@ -748,7 +748,7 @@ def regression_evaluation_single(y_true, y_pred):
     if (len(y_true_trun) < 5) or (len(y_pred_trun) < 5):
         raise Exception('实际使用的序列对y_true_trun与y_pred_trun中，点数过少不具有统计意义，每条序列至少要≥5个点')
     # 第一组，零次的相对性指标：
-    MAPE=mape(y_true=np.array(y_true_trun), y_pred=np.array(y_pred_trun))  # y_true != 0; no bias
+    MAPE = mape(y_true=np.array(y_true_trun), y_pred=np.array(y_pred_trun))  # y_true != 0; no bias
     SMAPE = smape(y_true=np.array(y_true_trun), y_pred=np.array(y_pred_trun))  # y_true + y_pred != 0; symmetric MAPE, no bias and more general, less susceptible to outliers than MAPE.
     RMSPE = eval_measures.rmspe(np.array(y_true_trun), np.array(y_pred_trun)) / 10  # y_true != 0; susceptible to outliers of deviation ratio, if more, RMSPE will be larger than MAPE.
     MTD_p2 = metrics.mean_tweedie_deviance(y_true=np.array(y_true_trun), y_pred=np.array(y_pred_trun), power=2) # y_pred > 0, y_true > 0; less susceptible to outliers than MAPE when y_pred / y_true > 1, nevertheless, more susceptible to outliers than MAPE when y_pred / y_true < 1
@@ -813,15 +813,36 @@ def accuracy_single(y_true, y_pred):
         return accuracy
 
 
-# if __name__ == "__main__":
-results = np.array([0.1,0.2,0.3,0.4])
-# w1相反数权重，当results中元素个数为2时，生成的w1为对称关系，指标0.4:0.6变为权重0.6:0.4；当元素个数增加时，权重间的比例会被压缩，这对于指标到权重的变换是有益的。
-w1 = (results.sum()-results) / (results.sum()-results).sum()
-print('w:', w1, '\n', sum(w1))
-# w2倒数权重，在整个定义域内指标和权重都是对称关系，例如指标为[0.1,0.2,0.3,0.4]，则权重为对称的[0.48,0.24,0.16,0.12]，但指标的倍数关系会大于趋近程度的倍数关系，所以是更极端的。
-w2 = (results.sum() / results) / (results.sum() / results).sum()
-print('w:', w2, '\n', sum(w2), '\n')
+def extendSample(arr, min_weight=0, max_weight=3)-> list:
+    """扩增近期数据样本, 使近期的数据复制更多的次数
 
-a = [5,5,5,5,5, 6,7,8,9,10]
-b = np.arange(1,11)
-regression_correlaiton_single(a, b, type='high')
+    Args:
+    arr (list|np.ndarray|pd.Series): 需要扩增的数据, 需要按时间排序后的序列
+    min_weight (int, optional): 最小复制次数. Defaults to 0.
+    max_weight (int, optional): 最大复制次数. Defaults to 3，则最近的数据复制3次，总共变为原来的4倍，最远的数据复制0次，总共不变。
+
+    Returns:
+    list: 扩增后的数据
+    """
+    arr_lenth = len(arr)
+    weight = [1+min_weight+(max_weight-min_weight)/(arr_lenth**2) * (i**2) for i in range(arr_lenth)]
+    weight = np.around(weight).astype(int)
+
+    extended_arr = []
+    for i in range(arr_lenth):
+       extended_arr = extended_arr + [arr[i]] * weight[i]
+    return extended_arr
+
+
+if __name__ == "__main__":
+    results = np.array([0.1,0.2,0.3,0.4])
+    # w1相反数权重，当results中元素个数为2时，生成的w1为对称关系，指标0.4:0.6变为权重0.6:0.4；当元素个数增加时，权重间的比例会被压缩，这对于指标到权重的变换是有益的。
+    w1 = (results.sum()-results) / (results.sum()-results).sum()
+    print('w:', w1, '\n', sum(w1))
+    # w2倒数权重，在整个定义域内指标和权重都是对称关系，例如指标为[0.1,0.2,0.3,0.4]，则权重为对称的[0.48,0.24,0.16,0.12]，但指标的倍数关系会大于趋近程度的倍数关系，所以是更极端的。
+    w2 = (results.sum() / results) / (results.sum() / results).sum()
+    print('w:', w2, '\n', sum(w2), '\n')
+
+    a = [5,5,5,5,5, 6,7,8,9,10]
+    b = np.arange(1,11)
+    regression_correlaiton_single(a, b, type='high')
