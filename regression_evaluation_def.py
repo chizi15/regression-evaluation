@@ -526,7 +526,7 @@ def regression_correlaiton_single(y_true, y_pred, type='high', w=(1,4,2,2,3)):
 
             metrics_raw = {'PRmul': PRmul, 'SRmul': SRmul, 'KTmul': KTmul, 'WTmul': WTmul,
                            'MGCmul': MGCmul}  # samples belong the row, metrics belong the colmun
-            df_raw = pd.DataFrame(metrics_raw, index={'corr of series'})
+            df_raw = pd.DataFrame(metrics_raw, index=['corr of series'])
             df_raw['correlation'] = wighted_corr
 
             return df_raw[['correlation', 'PRmul', 'SRmul', 'KTmul', 'WTmul', 'MGCmul']], [y_true_trun, y_pred_trun]
@@ -535,7 +535,7 @@ def regression_correlaiton_single(y_true, y_pred, type='high', w=(1,4,2,2,3)):
             error = e
             print('MGC error: ', error)
             metrics_raw = {'correlation': 0, 'PRmul': np.nan, 'SRmul': np.nan, 'KTmul': np.nan, 'WTmul': np.nan}  # samples belong the row, metrics belong the colmun
-            df_raw = pd.DataFrame(metrics_raw, index={'corr of series'})
+            df_raw = pd.DataFrame(metrics_raw, index=['corr of series'])
             return df_raw[['correlation', 'PRmul', 'SRmul', 'KTmul', 'WTmul']], [y_true_trun, y_pred_trun]
 
     if error != 'no' or type=='low' or (type=='high' and (len(y_true_trun) < 5 or len(y_pred_trun) < 5)):
@@ -569,7 +569,7 @@ def regression_correlaiton_single(y_true, y_pred, type='high', w=(1,4,2,2,3)):
 
             # 对各个相关性指标考虑置信度：p-value越大，越不能拒绝原假设（序列对无关），备择假设（序列对相关）越不可信，则相关系数乘以越小的系数，则认为序列对的实际相关性，跟计算出的相关系数比，越低
             metrics_raw = {'PRmul': PRmul, 'SRmul': SRmul, 'KTmul': KTmul, 'WTmul': WTmul}  # samples belong the row, metrics belong the colmun
-            df_raw = pd.DataFrame(metrics_raw, index={'corr of series'})
+            df_raw = pd.DataFrame(metrics_raw, index=['corr of series'])
             df_raw['correlation'] = wighted_corr
 
             return df_raw[['correlation', 'PRmul', 'SRmul', 'KTmul', 'WTmul']], [y_true_trun, y_pred_trun]
@@ -577,7 +577,7 @@ def regression_correlaiton_single(y_true, y_pred, type='high', w=(1,4,2,2,3)):
         except Exception as e:
             print('sample error: ', e)
             metrics_raw = {'correlation': np.nan, 'PRmul': np.nan, 'SRmul': np.nan, 'KTmul': np.nan, 'WTmul': np.nan}  # samples belong the row, metrics belong the colmun
-            df_raw = pd.DataFrame(metrics_raw, index={'corr of series'})
+            df_raw = pd.DataFrame(metrics_raw, index=['corr of series'])
             return df_raw[['correlation', 'PRmul', 'SRmul', 'KTmul', 'WTmul']], [y_true_trun, y_pred_trun]
     else:
         raise Exception('type must be either low or high')
